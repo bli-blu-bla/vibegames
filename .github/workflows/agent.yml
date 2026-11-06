@@ -6,7 +6,8 @@
 # Sicherheit: Der Job mit dem Modell hat nur Leserechte und keine Git-Credentials.
 # Er liefert einen Patch. Erst der PR-Job (ohne Modell) schreibt ins Repo.
 #
-# Konfiguration: Variable OPENCODE_MODEL (z. B. anthropic/claude-haiku-4-5) und das Secret des Providers.
+# Konfiguration: Variable OPENCODE_MODEL (z. B. opencode-go/claude-haiku-5-5 oder
+# anthropic/claude-haiku-4-5) und das Secret des Providers (OPENCODE_API_KEY für OpenCode Go/Zen).
 name: Agent
 
 on:
@@ -89,6 +90,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           case "$KIND" in
             game-request) skill=new-game ;;
@@ -104,6 +106,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           npm run sync:forms
           if ! npm run gate > .agent/gate.log 2>&1; then

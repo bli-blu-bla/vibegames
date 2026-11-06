@@ -76,6 +76,7 @@ braucht es keinen eigenen Server und GitHub Pages reicht.
 1. Settings → Pages → Source: GitHub Actions.
 2. Labels anlegen: `game-request`, `bug`, `feature`, `approved`.
 3. Settings → Environments → `agent` mit Required Reviewers.
-4. Variable `OPENCODE_MODEL` (z. B. `anthropic/claude-haiku-4-5`), optional `OPENCODE_VERSION`,
-   und das Secret des Providers (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` oder `OPENROUTER_API_KEY`).
+4. Variable `OPENCODE_MODEL` (z. B. `opencode-go/claude-haiku-5-5`), optional `OPENCODE_VERSION`,
+   und das Secret des Providers (`OPENCODE_API_KEY` für OpenCode Go/Zen, sonst `ANTHROPIC_API_KEY`,
+   `OPENAI_API_KEY` oder `OPENROUTER_API_KEY`).
 5. Settings → Actions → General: "Allow GitHub Actions to create and approve pull requests".
