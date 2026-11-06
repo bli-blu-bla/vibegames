@@ -1,0 +1,2 @@
+<!-- Flache Seemine mit Zündstacheln und Kern-Akzent -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="currentColor"><rect x="30" y="8" width="4" height="48" rx="2"/><rect x="8" y="30" width="48" height="4" rx="2"/><circle cx="16" cy="16" r="3"/><circle cx="48" cy="16" r="3"/><circle cx="16" cy="48" r="3"/><circle cx="48" cy="48" r="3"/><circle cx="32" cy="32" r="16"/><circle cx="27" cy="27" r="5" style="fill: var(--game-rose)"/></svg>

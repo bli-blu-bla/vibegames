@@ -20,6 +20,7 @@ body:
       options:
         # games:start
         - Lichter aus (lichter-aus)
+        - Minenfeld (minenfeld)
         - Pinguin-Schach (pinguin-schach)
         - Pixel-Snake (snake)
         - Stellwerk (stellwerk)

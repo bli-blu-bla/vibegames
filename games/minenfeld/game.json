@@ -1,0 +1,8 @@
+{
+  "title": "Minenfeld",
+  "description": "Decke alle sicheren Felder auf, ohne eine Mine zu treffen.",
+  "category": "denken",
+  "score": { "label": "BESTZEIT", "better": "lower", "format": "seconds" },
+  "controls": "Umschalter zwischen Graben und Flagge (Taste M). Direkt Flagge setzen: Rechtsklick, langes Drücken oder Taste F.",
+  "credits": []
+}
