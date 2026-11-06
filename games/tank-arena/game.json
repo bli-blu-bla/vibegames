@@ -1,0 +1,9 @@
+{
+  "title": "Tank Arena",
+  "description": "Kämpfe dich mit deinem Panzer durch zufällige Arenen, zerstöre Gegner und löse explosive Kettenreaktionen aus.",
+  "category": "arcade",
+  "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
+  "controls": "WASD zum Fahren, Leertaste zum Schießen oder Touch-Joystick & Feuer-Button",
+  "credits": [],
+  "multiplayer": "coop"
+}
