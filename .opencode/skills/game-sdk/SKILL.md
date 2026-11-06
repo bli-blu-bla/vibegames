@@ -119,6 +119,57 @@ export const isOver = (s: State) => …;
 - Immer neue Objekte zurückgeben, nie `s.x = …` (Tests und React verlassen sich darauf).
 - Konstanten (Größen, Geschwindigkeiten) oben als `export const`.
 
+## Schwierigkeit (Leicht, Mittel, Schwer)
+
+Nur wenn sinnvoll (Computer-Gegner, Tempo, Rätselgröße, Zeitlimit). Dann **immer genau diese drei
+Stufen**, Standard ist **Mittel**. Keine anderen Namen, keine vierte Stufe, kein eigener Bildschirm.
+
+```ts
+// logic.ts – Stufen als Daten, die Logik bekommt nur die Werte
+export interface Level { name: 'Leicht' | 'Mittel' | 'Schwer'; speed: number; lives: number }
+export const LEVELS: readonly Level[] = [
+  { name: 'Leicht', speed: 80, lives: 5 },
+  { name: 'Mittel', speed: 120, lives: 3 },
+  { name: 'Schwer', speed: 170, lives: 2 },
+];
+export const DEFAULT_LEVEL = 1;
+export function createState(level: Level = LEVELS[DEFAULT_LEVEL] as Level): State { … }
+```
+
+```tsx
+// main.tsx – Wahl merken, nur vor dem ersten Zug änderbar
+const [level, setLevel] = useState(() => api.storage.get('level', DEFAULT_LEVEL));
+const started = …; // erster Zug/erste Eingabe passiert
+const chooseLevel = (i: number) => {
+  setLevel(i);
+  api.storage.set('level', i);
+  setState(createState(LEVELS[i]));            // bzw. state.current = … bei Echtzeit
+};
+
+<fieldset className="xyz-levels">                {/* display:flex, gap var(--space-2), border 0 */}
+  <legend className="t-label muted">SCHWIERIGKEIT</legend>
+  {LEVELS.map((l, i) => (
+    <button key={l.name} type="button" className={level === i ? 'btn btn-primary' : 'btn'}
+      aria-pressed={level === i} disabled={started || paused} onClick={() => chooseLevel(i)}>
+      {l.name}
+    </button>
+  ))}
+</fieldset>
+```
+
+- Die Knopfreihe steht unter oder neben dem Spielfeld, nicht davor als Menü.
+- Während eines Laufs gesperrt. Neue Stufe = neuer Lauf (Neustart über die Shell, die Wahl bleibt
+  über `api.storage` erhalten).
+- **Echtzeit-Spiele** laufen erst nach der ersten Eingabe los (im Feld kurz „Taste drücken zum
+  Starten“), sonst bleibt keine Zeit für die Wahl.
+- **Rekord:** Die Shell kennt nur einen Rekord pro Spiel. Bei `better: 'higher'` Punkte nach Stufe
+  gewichten (z. B. ×1, ×2, ×3), damit Leicht keine Schwer-Rekorde schlägt. Bei `better: 'lower'`
+  (Zeit, Züge) die Stufe in die `message` von `api.gameOver` schreiben.
+- Online (`api.net`) keine Stufenwahl, es gilt Mittel.
+- Stufen unterscheiden sich in **Werten** (Tempo, Größe, Leben, Suchtiefe), nicht in Regeln.
+- Tests: jede Stufe startet gültig, Schwer ist messbar schwerer (schneller, weniger Leben …).
+- Beispiel: `games/pinguin-schach` (Stärke des Pinguins).
+
 ## Muster für main.tsx
 
 - **Ticker/Raster:** Zustand in `useState`, `useTicker`, Zeichnen in `useEffect([state, colors])`. → `games/snake/main.tsx`

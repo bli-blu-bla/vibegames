@@ -48,7 +48,7 @@ useNet<MoveMsg>(net, 'move', (m) => …);             // empfangen, aus @core/sd
   (`playKey(game, key)` liefert `null` bei Unsinn) und Zählerstand mitschicken (`ply`), damit
   doppelte oder veraltete Züge ignoriert werden.
 - Beide Seiten erkennen das Ende selbst (gleiche Logik, gleiche Züge) und melden ihr eigenes Ergebnis.
-- Was es nur gegen den Computer gibt (Stärke, Zug zurück), online ausblenden.
+- Was es nur gegen den Computer gibt (Stufen Leicht/Mittel/Schwer, Zug zurück), online ausblenden.
 
 **Echtzeit (coop)** → `games/stellwerk`
 

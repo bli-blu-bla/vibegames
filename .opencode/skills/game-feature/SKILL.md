@@ -15,6 +15,9 @@ Der Spielordner steht in der Aufgabe (`games/<ordner>/`). Nur dort arbeiten (plu
 2. **Kleinste Lösung wählen.** Ein Feature, das das Spiel einfacher macht oder abrundet, ist gut.
    Ein Feature, das Menüs, Einstellungen, Accounts oder Server bräuchte: weglassen und im
    PR-Text erklären, was stattdessen umgesetzt wurde.
+   Wünscht das Issue eine Schwierigkeit („zu schwer“, „zu leicht“, „Stufen“): genau drei Stufen
+   **Leicht, Mittel, Schwer** nach Skill `game-sdk`, Abschnitt "Schwierigkeit". Bisheriges
+   Verhalten wird zu **Mittel** (Standard), damit sich für bestehende Spieler nichts ändert.
 3. **Erst die Logik:** neue Regel in `logic.ts` als pure Funktion bzw. Erweiterung des `State`.
    Bestehende Funktionen nicht umbenennen, wenn es nicht nötig ist.
 4. **Test zuerst ergänzen** in `logic.test.ts`: ein Test, der das neue Verhalten beschreibt.

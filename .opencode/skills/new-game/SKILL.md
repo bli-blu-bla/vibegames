@@ -29,7 +29,12 @@ Der Ordnername steht in der Aufgabe. Nur in diesem Ordner arbeiten (plus `credit
    - Ein `State`-Typ, `createState()`, und Funktionen `(state, …) => neuer State`.
    - Kein React, kein DOM, kein `Math.random` (Zufall über das übergebene `Rng`).
    - Spielende eindeutig: `isOver(state)` oder ein `status`-Feld.
+   - **Schwierigkeit prüfen:** Hängt der Spaß stark vom Können ab (Computer-Gegner, Tempo,
+     Rätselgröße, Zeitlimit), drei Stufen **Leicht, Mittel, Schwer** anbieten (Skill `game-sdk`,
+     Abschnitt "Schwierigkeit"). Weglassen, wenn das Spiel schon von selbst schwerer wird
+     (Snake, Stellwerk) oder eine Stufe kaum etwas ändern würde.
 4. **Tests** in `logic.test.ts`: mindestens Start-Zustand, eine Kernregel, Spielende, Punkte.
+   Mit Stufen zusätzlich: jede Stufe startet gültig, Schwer ist messbar schwerer als Leicht.
 5. **Darstellung** in `main.tsx`: Default-Export `function Game({ api, paused }: GameProps)`.
    - `api.setScore(n)` bei jeder Punkteänderung, `api.gameOver()` genau einmal am Ende.
      Spiele mit Sieg (Schach, Karten-Runs, Schicht überstanden): `api.gameOver({ outcome: 'win', message: '…' })`.
@@ -71,6 +76,8 @@ Der Ordnername steht in der Aufgabe. Nur in diesem Ordner arbeiten (plus `credit
 ## Checkliste vor dem Ende
 
 - [ ] Spiel ist in zwei Minuten verstanden, kein Menü, keine Optionen
+  (einzige Ausnahme: die Stufenwahl Leicht/Mittel/Schwer, wenn sie sinnvoll ist)
+- [ ] Schwierigkeit bewusst entschieden: drei Stufen mit Standard Mittel, oder bewusst keine
 - [ ] `game.json`, `logo.svg`, `main.tsx`, `logic.ts`, `logic.test.ts` vorhanden
 - [ ] Score wird gemeldet, Game Over wird ausgelöst, Restart funktioniert (Shell mountet neu)
 - [ ] Pause stoppt alles
@@ -83,5 +90,7 @@ Der Ordnername steht in der Aufgabe. Nur in diesem Ordner arbeiten (plus `credit
 - `Math.random()` in der Logik → `createRng(api.seed)` in `main.tsx`, `rng` an die Logik übergeben.
 - Zustand für 60-fps-Spiele in `useState` → ruckelt. Echtzeit-Zustand in `useRef`, siehe Vorlage `canvas-loop`.
 - `api.gameOver()` mehrfach oder ohne vorheriges `api.setScore()` → Rekord stimmt nicht.
+- Andere Stufennamen („Normal“, „Profi“), mehr als drei Stufen oder ein Stufen-Menü vor dem Spiel
+  → genau `Leicht`, `Mittel`, `Schwer` als Knopfreihe neben dem Feld.
 - Eigene Pause-/Restart-Buttons oder Score-Anzeige → gibt es schon in der Shell, weglassen.
 - Eigenes Fenster-Layout, Header, Titel → die Shell zeigt Titel und Leiste, das Spiel rendert nur das Feld.
