@@ -1,0 +1,8 @@
+{
+  "title": "Lichter aus",
+  "description": "Schalte alle Lichter aus. Jeder Klick schaltet ein Feld und seine Nachbarn um.",
+  "category": "denken",
+  "score": { "label": "BESTE ZÜGE", "better": "lower", "format": "moves" },
+  "controls": "Klick, Tippen, Pfeiltasten, Leertaste oder Enter",
+  "credits": []
+}
