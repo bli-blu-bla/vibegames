@@ -1,0 +1,40 @@
+/* Klassen mit Spiel-Präfix (hier w21-), damit nichts mit anderen Games kollidiert. Nur Tokens. */
+.w21 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 480px;
+  min-height: 320px;
+  padding: var(--space-6) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-100);
+}
+.w21-total {
+  color: var(--highlight);
+}
+.w21-dice {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.w21-die {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--game-sand);
+  color: var(--surface-100);
+}
+.w21-actions {
+  display: flex;
+  gap: var(--space-2);
+}

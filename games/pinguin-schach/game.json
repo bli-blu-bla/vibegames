@@ -1,0 +1,9 @@
+{
+  "title": "Pinguin-Schach",
+  "description": "Schach gegen einen Pinguin mit drei Stärken. Setz ihn mit möglichst wenigen Zügen matt.",
+  "category": "denken",
+  "score": { "label": "BESTE ZÜGE", "better": "lower", "format": "moves" },
+  "controls": "Figur antippen, dann Zielfeld",
+  "credits": [],
+  "multiplayer": "versus"
+}

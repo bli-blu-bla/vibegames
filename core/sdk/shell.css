@@ -1,0 +1,232 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--surface-100);
+}
+
+.shell-bar {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  grid-template-areas: "title stats settings controls";
+  align-items: center;
+  gap: var(--space-2) var(--space-2);
+  min-height: 64px;
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface-200);
+  border-bottom: 1px solid var(--line);
+}
+
+.shell-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.shell-title {
+  grid-area: title;
+  min-width: 0;
+}
+.shell-title h1 {
+  margin-left: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-settings {
+  grid-area: settings;
+  margin-left: var(--space-3);
+}
+.shell-controls {
+  grid-area: controls;
+}
+
+.shell-stats {
+  grid-area: stats;
+  gap: var(--space-5);
+}
+.shell-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.shell-stat .shell-score {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.shell-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+}
+
+.shell-field {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 1280px;
+}
+
+.shell-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  background: color-mix(in srgb, var(--surface-100) 85%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.shell-result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--ink);
+  text-align: center;
+}
+.shell-over {
+  color: var(--danger);
+}
+.shell-win {
+  color: var(--highlight);
+}
+.shell-message {
+  max-width: 36ch;
+  text-align: center;
+}
+
+.shell-record {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--highlight);
+  font-weight: 600;
+}
+
+.shell-credits:hover {
+  color: var(--ink);
+}
+
+/* Standard-Rahmen für Canvas-Spielfelder aus useCanvas() */
+.game-canvas {
+  display: block;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-100);
+}
+
+@media (max-width: 640px) {
+  .shell-bar {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title controls"
+      "stats settings";
+    padding: var(--space-2) var(--space-4);
+  }
+  .shell-stats {
+    gap: var(--space-4);
+  }
+  .shell-stat {
+    align-items: flex-start;
+  }
+  .shell-settings {
+    margin-left: 0;
+  }
+  .shell-online {
+    display: none;
+  }
+}
+
+/* ---------- Online ---------- */
+.shell-online {
+  margin-left: var(--space-2);
+  flex-shrink: 0;
+}
+.shell-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.shell-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 480px;
+  min-height: 360px;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  background: var(--surface-200);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.shell-overlay .shell-lobby {
+  min-height: 0;
+}
+.shell-lobby-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.shell-lobby-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.shell-code {
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.shell-join {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.shell-input {
+  width: 9ch;
+  height: 40px;
+  padding: 0 var(--space-2);
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: var(--surface-100);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.shell-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.shell-spin {
+  animation: shell-spin 1.2s linear infinite;
+}
+@keyframes shell-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell-spin {
+    animation: none;
+  }
+}
+.shell-tips {
+  margin: 0;
+  padding-left: var(--space-5);
+  text-align: left;
+}
+.shell-detail {
+  overflow-wrap: anywhere;
+}

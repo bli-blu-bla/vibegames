@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🎲 Spiele-Sammlung – Schach, Eisenbahn &amp; Kartenkampf</title>
+<style>
+  :root { --text:#eef3ff; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #2b3a63 0%, #141b2d 45%, #0d1220 100%);
+    display: grid; place-items: center; padding: 24px;
+  }
+  .wrap { width: min(880px, 100%); text-align: center; }
+  h1 {
+    margin: 0 0 6px; font-size: clamp(1.8rem, 5vw, 3rem);
+    background: linear-gradient(90deg, #ffd36e, #4cc9f0, #ff8fab);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  p.sub { margin: 0 0 34px; opacity: .75; font-style: italic; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  a.card {
+    display: block; text-decoration: none; color: var(--text);
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 20px; padding: 26px 22px; text-align: left;
+    transition: .18s;
+  }
+  a.card:hover { transform: translateY(-4px); background: rgba(255,255,255,.12); box-shadow: 0 18px 40px rgba(0,0,0,.4); }
+  .emoji { font-size: 52px; }
+  .card h2 { margin: 10px 0 6px; font-size: 1.3rem; }
+  .card p { margin: 0; opacity: .78; font-size: .92rem; line-height: 1.5; }
+  .tags { margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: .72rem; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.1); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎲 Spiele-Sammlung</h1>
+    <p class="sub">Drei Spiele, null Keks-Schaden.</p>
+
+    <div class="cards">
+      <a class="card" href="chess/index.html">
+        <div class="emoji">♟️</div>
+        <h2>Pinguin Schach &amp; Keks</h2>
+        <p>Komplettes Schachspiel mit KI-Gegner „Pinguin". Rochade, En passant, Promotion – und viele Sprüche.</p>
+        <div class="tags"><span class="tag">Schach</span><span class="tag">KI</span><span class="tag">2 Spieler</span></div>
+      </a>
+
+      <a class="card" href="eisenbahn/index.html">
+        <div class="emoji">🚂</div>
+        <h2>Eisenbahn &amp; Keks</h2>
+        <p>Lege Gleise, stelle Weichen und fahre deinen Zug ins Ziel – bevor der Pinguin mit seinem Schnabel gewinnt.</p>
+        <div class="tags"><span class="tag">Eisenbahnspiel</span><span class="tag">KI</span><span class="tag">2 Spieler</span></div>
+      </a>
+
+      <a class="card" href="card/index.html">
+        <div class="emoji">🃏</div>
+        <h2>Trumpf &amp; Prügel</h2>
+        <p>Stell Poker-Hände zusammen, blocke freche Konter und kämpfe dich durch die Arena.</p>
+        <div class="tags"><span class="tag">Kartenspiel</span><span class="tag">Poker-Kombos</span><span class="tag">Kampf</span></div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

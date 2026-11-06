@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171522">
+  <title>Trumpf &amp; Prügel – Kartenkampf</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="../index.html" aria-label="Zur Spielesammlung">
+        <span class="brand-mark">T<span>♠</span></span>
+        <span>TRUMPF <i>&amp;</i> PRÜGEL</span>
+      </a>
+      <div class="top-note"><span class="live-dot"></span> DIE ARENA IST GEÖFFNET</div>
+      <a class="exit-link" href="../index.html">← Spielesammlung</a>
+    </header>
+
+    <main>
+      <section class="intro-row">
+        <div>
+          <div class="eyebrow">KARTEN AUF DEN TISCH. FÄUSTE AUCH.</div>
+          <h1>Trumpf <span>&amp;</span> Prügel</h1>
+          <p class="subtitle">Poker-Hände, freche Gegner und absolut fragwürdige Sportlichkeit.</p>
+        </div>
+        <button class="icon-button" id="sound-toggle" aria-label="Sound ein- oder ausschalten" title="Sound ein/aus">🔊</button>
+      </section>
+
+      <section class="arena" aria-label="Kampfarena">
+        <div class="arena-topline">
+          <div class="run-label"><span class="tiny-star">✦</span> RUN <b id="run-number">01</b> <span class="divider">/</span> ARENA <b id="arena-number">01</b></div>
+          <div class="round-label" id="round-label">DEIN ZUG</div>
+          <button class="restart-button" id="new-run">↻ Neuer Run</button>
+        </div>
+
+        <div class="combatants">
+          <article class="fighter player-fighter">
+            <div class="fighter-heading"><div class="avatar player-avatar">😎</div><div><span class="fighter-kicker">DAS BIST DU</span><h2>Der Kartentiger</h2></div><span class="fighter-tag">DU</span></div>
+            <div class="health-row"><span>❤️ AUSDAUER</span><b id="player-hp-label">30 / 30</b></div>
+            <div class="health-track"><div class="health-fill player-health" id="player-health"></div></div>
+            <div class="fighter-bottom"><div class="shield-stat">🛡️ <b id="player-block">0</b><small>BLOCK</small></div><div class="quip" id="player-quip">„Ich hab ein Ass im Ärmel. Und Snacks.“</div></div>
+          </article>
+
+          <div class="versus"><span>VS</span><i>✦</i></div>
+
+          <article class="fighter enemy-fighter" id="enemy-panel">
+            <div class="fighter-heading"><div class="avatar enemy-avatar" id="enemy-emoji">🦆</div><div><span class="fighter-kicker">DEIN GEGNER</span><h2 id="enemy-name">Graf Quakula</h2></div><span class="enemy-rank" id="enemy-rank">#01</span></div>
+            <div class="health-row"><span>💢 MOTIVATION</span><b id="enemy-hp-label">24 / 24</b></div>
+            <div class="health-track"><div class="health-fill enemy-health" id="enemy-health"></div></div>
+            <div class="fighter-bottom"><div class="intent" id="enemy-intent"><span>⚡</span><div><small>NÄCHSTER ANGRIFF</small><b id="intent-label">6 Schaden</b></div></div><div class="quip enemy-quip" id="enemy-quip">„Quak. Das war eine Drohung.“</div></div>
+          </article>
+        </div>
+
+        <div class="battle-message" id="battle-message" aria-live="polite"><span class="message-icon">🎴</span><span>Such dir <b>3 Karten</b> aus. Mal sehen, was du auf der Hand hast.</span></div>
+      </section>
+
+      <section class="play-area">
+        <div class="hand-heading">
+          <div><div class="eyebrow">DEINE HAND <span class="hand-count" id="hand-count">5 KARTEN</span></div><h2>Wähle deine Karten</h2></div>
+          <div class="hand-tip">Klick zum Auswählen <span>•</span> Auswahl: <b id="selection-count">0</b>/3</div>
+        </div>
+
+        <div class="hand" id="hand" aria-label="Deine Handkarten"></div>
+
+        <div class="action-row">
+          <div class="combo-preview"><span class="preview-icon">✦</span><div><small>DEINE KOMBO</small><b id="combo-name">Noch keine</b></div></div>
+          <button class="play-button" id="play-cards" disabled><span>⚔</span> KARTEN AUSSPIELEN <kbd>ENTER</kbd></button>
+          <div class="deck-info"><span class="deck-icon">▤</span><span>Nach dem Zug ziehst du wieder auf <b>5 Karten</b> auf.</span></div>
+        </div>
+      </section>
+
+      <footer class="rules-strip">
+        <div><span class="rule-suit red-suit">♥ ♦</span><span><b>Herz &amp; Karo</b><small>Heilen &amp; Extra-Schaden</small></span></div>
+        <div><span class="rule-suit">♠</span><span><b>Pik</b><small>Mehr Wumms</small></span></div>
+        <div><span class="rule-suit">♣</span><span><b>Kreuz</b><small>Blockt den Konter</small></span></div>
+        <div class="poker-note">PAARE, DRILLINGE UND STRAẞEN MACHEN MEHR SCHADEN. <span>♡</span></div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="overlay hidden" id="result-overlay" role="dialog" aria-modal="true" aria-labelledby="result-title">
+    <div class="result-card"><div class="result-spark" id="result-spark">🏆</div><div class="eyebrow" id="result-eyebrow">RUN BEENDET</div><h2 id="result-title">Arena geräumt!</h2><p id="result-copy">Die Gegner sind besiegt. Deine Versicherung wird sich melden.</p><button class="play-button" id="continue-run">NÄCHSTE ARENA <span>→</span></button></div>
+  </div>
+  <div class="toast" id="toast" aria-live="polite"></div>
+  <script src="game.js"></script>
+</body>
+</html>

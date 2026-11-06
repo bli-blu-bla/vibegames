@@ -1,0 +1,86 @@
+name: Game Request
+description: Ein neues kleines Spiel für die Sammlung. Ein Modell baut es als Pull Request.
+title: "[Game] "
+labels: ["game-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Klein, einfach, für zwischendurch: in unter zwei Minuten verstanden.
+        Nach dem Label `approved` durch eine Person mit Schreibrechten baut opencode das Spiel.
+  - type: input
+    id: title
+    attributes:
+      label: Titel
+      description: Name des Spiels, wie er in der Galerie steht.
+      placeholder: Pixel-Snake
+    validations:
+      required: true
+  - type: input
+    id: folder
+    attributes:
+      label: Ordnername
+      description: "Nur Kleinbuchstaben, Ziffern und Bindestrich (Regex ^[a-z0-9-]+$). Wird zu games/<ordnername>/."
+      placeholder: pixel-snake
+    validations:
+      required: true
+  - type: input
+    id: description
+    attributes:
+      label: Kurzbeschreibung
+      description: Ein Satz für die Galerie-Kachel, höchstens 120 Zeichen.
+      placeholder: Sammle Pixel, werde länger und weiche dir selbst aus.
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Kategorie
+      options:
+        - Arcade
+        - Denken
+        - Karten und Würfel
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Spielregeln
+      description: Ziel, Ablauf, wann ist das Spiel vorbei, wie wird gezählt?
+      placeholder: |
+        - Die Schlange bewegt sich auf einem Raster.
+        - Futter macht sie länger und gibt 10 Punkte.
+        - Wand oder eigener Körper beendet das Spiel.
+    validations:
+      required: true
+  - type: input
+    id: controls
+    attributes:
+      label: Steuerung
+      placeholder: Pfeiltasten, WASD oder Wischen
+    validations:
+      required: true
+  - type: dropdown
+    id: score
+    attributes:
+      label: Wertung
+      options:
+        - Punkte (mehr ist besser)
+        - Zeit (weniger ist besser)
+        - Züge (weniger ist besser)
+    validations:
+      required: true
+  - type: textarea
+    id: assets
+    attributes:
+      label: Assets
+      description: |
+        Optional. Bilder oder Sounds per Drag-and-drop anhängen. Sie werden auf Viren geprüft
+        und unter games/<ordnername>/assets/ abgelegt.
+  - type: checkboxes
+    id: rights
+    attributes:
+      label: Rechte an den Anhängen
+      options:
+        - label: Die Anhänge sind von mir oder CC0, und ich nenne oben die Quelle.
+          required: false

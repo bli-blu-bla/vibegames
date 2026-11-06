@@ -1,0 +1,8 @@
+{
+  "title": "Pixel-Snake",
+  "description": "Sammle Pixel, werde länger und weiche dir selbst aus.",
+  "category": "arcade",
+  "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
+  "controls": "Pfeiltasten, WASD oder Wischen",
+  "credits": []
+}

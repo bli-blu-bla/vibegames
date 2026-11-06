@@ -1,0 +1,12 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.vite/
+*.log
+.DS_Store
+.agent/
+
+# Lokale Umgebungsvariablen (z. B. TURN-Zugang)
+.env.local
+.env.*.local

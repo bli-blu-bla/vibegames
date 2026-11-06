@@ -1,0 +1,54 @@
+name: Bug Fix
+description: Etwas funktioniert nicht, in der Galerie (Core) oder in einem Spiel.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Core oder Game?
+      options:
+        - Game
+        - Core
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Spiel
+      description: Nur bei "Game". Die Liste wird mit "npm run sync:forms" erzeugt.
+      options:
+        # games:start
+        - Pinguin-Schach (pinguin-schach)
+        - Pixel-Snake (snake)
+        - Stellwerk (stellwerk)
+        - Trumpf & Prügel (trumpf-pruegel)
+        # games:end
+    validations:
+      required: false
+  - type: textarea
+    id: bug
+    attributes:
+      label: Was passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: |
+        1. Spiel starten
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was sollte passieren?
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser und Gerät
+      placeholder: Firefox 140, Android

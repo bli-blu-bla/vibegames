@@ -1,0 +1,9 @@
+{
+  "name": "Pixelify Sans",
+  "author": "The Pixelify Sans Project Authors",
+  "url": "https://fonts.google.com/specimen/Pixelify+Sans",
+  "license": "OFL-1.1",
+  "type": "fonts",
+  "usedIn": ["shared"],
+  "packages": ["@fontsource/pixelify-sans"]
+}

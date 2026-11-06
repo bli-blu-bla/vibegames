@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md", "design/README.md"],
+  "permission": {
+    "edit": "allow",
+    "webfetch": "deny",
+    "bash": {
+      "*": "allow",
+      "git push*": "deny",
+      "git commit*": "deny",
+      "gh *": "deny",
+      "curl *": "deny",
+      "wget *": "deny",
+      "npm publish*": "deny"
+    }
+  }
+}

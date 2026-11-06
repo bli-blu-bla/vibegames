@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pinguin Schach &amp; Keks – das witzigste Schachspiel der Welt</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <h1>🐧 Pinguin Schach &amp; Keks</h1>
+    <p class="sub">Schach für alle, die beim Frühstück Keks tauchen.</p>
+  </header>
+
+  <main class="layout">
+
+    <!-- ============ Brett ============ -->
+    <section class="board-wrap">
+      <div class="player white-card">
+        <div class="avatar">👤</div>
+        <div class="who">
+          <div class="name" id="whiteName">Du</div>
+          <div class="score" id="whiteScore">Punkte: 0</div>
+        </div>
+        <div class="tray" id="whiteTray"></div>
+      </div>
+
+      <div class="board-shell">
+        <div class="board" id="board"></div>
+        <div class="overlay" id="overlay" hidden>
+          <div class="overlay-box">
+            <div class="overlay-icon" id="ovIcon">🏆</div>
+            <h2 id="ovTitle">Schach matt!</h2>
+            <p id="ovText">Du hast gewonnen. Feier!</p>
+            <button class="btn primary" id="ovBtn">Neues Spiel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="player black-card">
+        <div class="avatar">🐧</div>
+        <div class="who">
+          <div class="name" id="blackName">Pinguin (KI)</div>
+          <div class="score" id="blackScore">Punkte: 0</div>
+        </div>
+        <div class="tray" id="blackTray"></div>
+      </div>
+    </section>
+
+    <!-- ============ Seitenleiste ============ -->
+    <aside class="side">
+      <div class="panel">
+        <div class="status" id="status">🟢 Dein Zug!</div>
+        <div class="thinking" id="thinking" hidden><span id="thinkText">Der Pinguin überlegt</span><span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
+        <div class="quote" id="quote">„Ich hab eine Strategie. Sie heißt: Keks."</div>
+      </div>
+
+      <div class="panel">
+        <h3>⚙️ Optionen</h3>
+        <label class="field">
+          <span>Modus</span>
+          <select id="modeSel">
+            <option value="ai">🐧 Du gegen Pinguin</option>
+            <option value="hot">👥 Zwei Spieler (hot seat)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Schwierigkeit</span>
+          <select id="diffSel">
+            <option value="0">🐣 Leicht (Pinguin schläft)</option>
+            <option value="1" selected>😎 Normal (Pinguin lernt)</option>
+            <option value="2">😡 Schwer (Pinguin ist grantig)</option>
+          </select>
+        </label>
+        <div class="btnrow">
+          <button class="btn" id="newBtn">🔄 Neues Spiel</button>
+          <button class="btn" id="undoBtn">↩️ Zug zurück</button>
+        </div>
+        <div class="btnrow">
+          <button class="btn" id="flipBtn">🔃 Brett drehen</button>
+          <button class="btn" id="soundBtn">🔊 Ton an</button>
+        </div>
+        <button class="btn danger wide" id="resignBtn">🏳️ Aufgeben (Pinguin gewinnt)</button>
+      </div>
+
+      <div class="panel">
+        <h3>📜 Züge</h3>
+        <ol class="movelist" id="moveList"></ol>
+      </div>
+
+      <div class="panel funny">
+        <h3>🎪 Spruch des Tages</h3>
+        <p id="dailyQuote">„Keks schlägt Kaviar – jedenfalls am Dienstag."</p>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div id="ghost" class="ghost" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="chess.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+/* Pinguin-Schach. Spielfeld-Farben: game-sand (du), game-sky (Pinguin), accent (Auswahl), danger (Schach). */
+.pgs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+.pgs-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: min(100%, 480px);
+  aspect-ratio: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.pgs-sq {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.pgs-light {
+  background: var(--surface-300);
+}
+.pgs-dark {
+  background: var(--surface-100);
+}
+.pgs-last {
+  outline: 2px solid var(--ink-muted);
+  outline-offset: -2px;
+}
+.pgs-sel {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.pgs-check {
+  outline: 3px solid var(--danger);
+  outline-offset: -3px;
+}
+
+.pgs-piece {
+  font-size: clamp(24px, 8vw, 44px);
+  line-height: 1;
+  user-select: none;
+}
+.pgs-w {
+  color: var(--game-sand);
+}
+.pgs-b {
+  color: var(--game-sky);
+}
+
+.pgs-hint {
+  position: absolute;
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.pgs-hint-cap {
+  width: 84%;
+  height: 84%;
+  background: none;
+  border: 3px solid var(--accent);
+}
+
+.pgs-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(100%, 260px);
+}
+
+.pgs-status {
+  font-weight: 600;
+}
+.pgs-status-check {
+  color: var(--danger);
+}
+
+.pgs-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pgs-levels legend {
+  margin-bottom: var(--space-2);
+}
+
+.pgs-moves {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 144px;
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .pgs-side {
+    width: min(100%, 480px);
+  }
+  .pgs-moves {
+    min-height: 0;
+  }
+}
