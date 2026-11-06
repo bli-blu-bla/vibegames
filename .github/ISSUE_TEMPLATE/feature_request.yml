@@ -10,6 +10,7 @@ body:
       description: Die Liste wird mit "npm run sync:forms" erzeugt.
       options:
         # games:start
+        - Lichter aus (lichter-aus)
         - Pinguin-Schach (pinguin-schach)
         - Pixel-Snake (snake)
         - Stellwerk (stellwerk)
