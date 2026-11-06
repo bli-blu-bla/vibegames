@@ -97,8 +97,10 @@ jobs:
             feature) skill=game-feature ;;
             bug) skill=game-bugfix ;;
           esac
-          opencode run --auto ${MODEL:+--model "$MODEL"} --file .agent/task.md \
-            "Lies AGENTS.md. Erledige die Aufgabe aus der angehängten Datei task.md mit dem Skill \"$skill\". Beende erst, wenn \"npm run gate\" grün ist."
+          # Nachricht vor --file: --file nimmt in opencode 1.x alle folgenden Argumente als Dateien.
+          opencode run --auto ${MODEL:+--model "$MODEL"} \
+            "Lies AGENTS.md. Erledige die Aufgabe aus der angehängten Datei task.md mit dem Skill \"$skill\". Beende erst, wenn \"npm run gate\" grün ist." \
+            --file .agent/task.md
 
       - name: Quality Gate (mit einem Korrekturversuch)
         env:
@@ -111,8 +113,9 @@ jobs:
           npm run sync:forms
           if ! npm run gate > .agent/gate.log 2>&1; then
             tail -n 80 .agent/gate.log
-            opencode run --auto --continue ${MODEL:+--model "$MODEL"} --file .agent/gate.log \
-              "Das Quality Gate ist fehlgeschlagen, Log im Anhang. Behebe die Fehler mit dem Skill \"quality-gate\"."
+            opencode run --auto --continue ${MODEL:+--model "$MODEL"} \
+              "Das Quality Gate ist fehlgeschlagen, Log im Anhang. Behebe die Fehler mit dem Skill \"quality-gate\"." \
+              --file .agent/gate.log
             npm run sync:forms
             npm run gate
           fi
