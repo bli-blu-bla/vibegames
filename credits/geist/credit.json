@@ -1,0 +1,9 @@
+{
+  "name": "Geist und Geist Mono",
+  "author": "Vercel, basement.studio",
+  "url": "https://vercel.com/font",
+  "license": "OFL-1.1",
+  "type": "fonts",
+  "usedIn": ["shared"],
+  "packages": ["@fontsource/geist-sans", "@fontsource/geist-mono"]
+}

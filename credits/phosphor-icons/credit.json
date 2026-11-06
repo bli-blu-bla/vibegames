@@ -1,0 +1,9 @@
+{
+  "name": "Phosphor Icons",
+  "author": "Phosphor Icons (Helena Zhang, Tobias Fried)",
+  "url": "https://phosphoricons.com",
+  "license": "MIT",
+  "type": "icons",
+  "usedIn": ["shared"],
+  "packages": ["@phosphor-icons/react"]
+}

@@ -1,0 +1,131 @@
+/* Trumpf & Prügel. Spielfeld-Farben: game-sand (Gegner), accent (Leben, Auswahl), game-sky (Block), game-rose (rote Farben). */
+.tp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 560px;
+  padding: var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-100);
+}
+
+.tp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-200);
+}
+
+.tp-enemy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.tp-enemy-icon {
+  flex: none;
+  color: var(--game-sand);
+}
+.tp-grow {
+  flex: 1;
+  min-width: 0;
+}
+.tp-intent,
+.tp-block {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+}
+.tp-block {
+  color: var(--game-sky);
+}
+
+.tp-player {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tp-bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.tp-bar {
+  flex: 1;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-300);
+  overflow: hidden;
+}
+.tp-bar-fill {
+  height: 100%;
+  transition: width 180ms ease;
+}
+.tp-bar-enemy {
+  background: var(--game-sand);
+}
+.tp-bar-player {
+  background: var(--accent);
+}
+
+.tp-message {
+  min-height: 44px;
+}
+
+.tp-hand {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tp-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-300);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.tp-card:disabled {
+  cursor: default;
+}
+.tp-red {
+  color: var(--game-rose);
+}
+.tp-selected {
+  border: 2px solid var(--accent);
+  transform: translateY(-8px);
+}
+.tp-rank {
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 500;
+}
+.tp-suit {
+  font-size: 28px;
+  line-height: 28px;
+}
+
+.tp-actions {
+  display: flex;
+  justify-content: center;
+}
+.tp-help {
+  text-align: center;
+}

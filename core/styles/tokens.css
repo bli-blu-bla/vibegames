@@ -1,0 +1,110 @@
+/* Automatisch erzeugt aus design/tokens.json – nicht von Hand ändern. npm run tokens */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-100: #0f1115;
+  --surface-200: #171a21;
+  --surface-300: #1f232c;
+  --line: #343a47;
+  --line-strong: #6b7385;
+  --ink: #e8eaee;
+  --ink-muted: #a3abba;
+  --accent: #6fe3b0;
+  --on-accent: #07140e;
+  --highlight: #f5b94a;
+  --danger: #ff8077;
+  --game-sky: #6cc4ff;
+  --game-rose: #ff8fb1;
+  --game-sand: #e0c9a0;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --surface-100: #f6f5f1;
+  --surface-200: #ffffff;
+  --surface-300: #ebe9e2;
+  --line: #cfcbc0;
+  --line-strong: #7a7a72;
+  --ink: #16181d;
+  --ink-muted: #545a67;
+  --accent: #0b7a52;
+  --on-accent: #ffffff;
+  --highlight: #8a5700;
+  --danger: #b3261e;
+  --game-sky: #1b6fb0;
+  --game-rose: #b4285f;
+  --game-sand: #7d6a3f;
+}
+
+:root {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-pixel: "Pixelify Sans", "Geist Mono", monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+}
+
+.t-display {
+  font-family: var(--font-pixel);
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 600;
+}
+
+.t-heading {
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+.t-body-strong {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.t-small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+
+.t-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.t-score {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 500;
+}
+
+.t-mono-small {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}

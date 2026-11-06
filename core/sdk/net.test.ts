@@ -1,0 +1,243 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createRoomCode,
+  type Envelope,
+  NetSession,
+  type NetState,
+  normalizeRoomCode,
+  type TransportFactory,
+  type TransportHandlers,
+} from './net.ts';
+
+/** Speicher-Netz: alle Teilnehmer sehen sich, Nachrichten werden mit flush() zugestellt. */
+function memoryNet() {
+  const nodes = new Map<string, TransportHandlers>();
+  const pending: (() => void)[] = [];
+  const factory =
+    (id: string): TransportFactory =>
+    async (h) => {
+      for (const [other, oh] of nodes) {
+        pending.push(() => oh.join(id));
+        pending.push(() => h.join(other));
+      }
+      nodes.set(id, h);
+      return {
+        selfId: id,
+        send: (msg: Envelope, to: string) => pending.push(() => nodes.get(to)?.message(msg, id)),
+        leave: () => {
+          nodes.delete(id);
+          for (const oh of nodes.values()) pending.push(() => oh.leave(id));
+        },
+      };
+    };
+  // Mehrere Durchgänge, weil Sitzungen asynchron verbinden und Antworten neue Nachrichten auslösen
+  const flush = async () => {
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+      while (pending.length) pending.shift()?.();
+    }
+  };
+  return { factory, flush };
+}
+
+function join(net: ReturnType<typeof memoryNet>, id: string) {
+  const log: NetState[] = [];
+  const pauses: boolean[] = [];
+  const s = new NetSession(net.factory(id), 'versus', {
+    change: (st) => log.push(st),
+    pause: (p) => pauses.push(p),
+  });
+  return { s, log, pauses };
+}
+
+describe('NetSession', () => {
+  it('paart zwei Spieler, legt Rollen fest und startet Runde 1', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    await net.flush();
+    expect(a.s.state.status).toBe('waiting');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    expect(a.s.state).toMatchObject({ status: 'playing', role: 'host', round: 1 });
+    expect(b.s.state).toMatchObject({ status: 'playing', role: 'guest', round: 1 });
+  });
+
+  it('stellt Spielnachrichten zu und puffert sie bis zum Anmelden', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    a.s.game()?.send('move', { from: 12, to: 28 });
+    await net.flush();
+    const got: unknown[] = [];
+    b.s.game()?.on('move', (d) => got.push(d));
+    expect(got).toEqual([{ from: 12, to: 28 }]);
+  });
+
+  it('Neustart vom Gast läuft über den Host, alte Nachrichten verfallen', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    const old = a.s.game();
+    b.s.restart();
+    await net.flush();
+    await net.flush();
+    expect(a.s.state.round).toBe(2);
+    expect(b.s.state.round).toBe(2);
+    old?.send('move', 1);
+    await net.flush();
+    const got: unknown[] = [];
+    b.s.game()?.on('move', (d) => got.push(d));
+    expect(got).toEqual([]);
+  });
+
+  it('synchronisiert die Pause', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    a.s.pause(true);
+    await net.flush();
+    expect(b.pauses).toEqual([true]);
+  });
+
+  it('weist einen dritten Spieler ab und meldet, wenn der Mitspieler geht', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    const c = join(net, 'c');
+    await net.flush();
+    await net.flush();
+    expect(c.s.state.status).toBe('full');
+    expect(a.s.state.status).toBe('playing');
+    b.s.close();
+    await net.flush();
+    // c rückt nach
+    expect(a.s.state).toMatchObject({ status: 'playing' });
+    expect(c.s.state).toMatchObject({ status: 'playing', round: a.s.state.round });
+  });
+
+  it('meldet, wenn der Mitspieler geht', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    b.s.close();
+    await net.flush();
+    expect(a.s.state).toMatchObject({ status: 'waiting', peerLeft: true, role: null });
+  });
+});
+
+describe('NetSession nach Neuladen', () => {
+  it('der neue Tab rückt nach, sobald der alte weg ist', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a');
+    const b = join(net, 'b');
+    await net.flush();
+    await net.flush();
+    // b lädt neu: der neue Tab ist da, bevor der alte als gegangen gemeldet wird
+    const b2 = join(net, 'b2');
+    await net.flush();
+    await net.flush();
+    expect(b2.s.state.status).toBe('full');
+    b.s.close();
+    await net.flush();
+    await net.flush();
+    await net.flush();
+    expect(a.s.state).toMatchObject({ status: 'playing', role: 'host' });
+    expect(b2.s.state).toMatchObject({ status: 'playing', role: 'guest' });
+    expect(b2.s.state.round).toBe(a.s.state.round);
+  });
+
+  it('auch wenn der Neue Host wird', async () => {
+    const net = memoryNet();
+    const m = join(net, 'm');
+    const z = join(net, 'z');
+    await net.flush();
+    await net.flush();
+    const a = join(net, 'a');
+    await net.flush();
+    await net.flush();
+    z.s.close();
+    await net.flush();
+    await net.flush();
+    await net.flush();
+    expect(a.s.state).toMatchObject({ status: 'playing', role: 'host' });
+    expect(m.s.state).toMatchObject({ status: 'playing', role: 'guest' });
+  });
+});
+
+describe('Raum-Code', () => {
+  it('erzeugt gültige Codes und bereinigt Eingaben', () => {
+    const code = createRoomCode();
+    expect(normalizeRoomCode(code)).toBe(code);
+    expect(normalizeRoomCode('abc-def')).toBe('ABCDEF');
+    expect(normalizeRoomCode('ABC')).toBeNull();
+    expect(normalizeRoomCode('ABCDE0')).toBeNull();
+  });
+});
+
+describe('NetSession Reihenfolge', () => {
+  it('Rundennachricht vor dem Join-Ereignis zählt als Beitritt', async () => {
+    let handlers: TransportHandlers | undefined;
+    const sent: Envelope[] = [];
+    const s = new NetSession(
+      async (h) => {
+        handlers = h;
+        return { selfId: 'z', send: (m) => sent.push(m), leave: () => {} };
+      },
+      'coop',
+      { change: () => {}, pause: () => {} },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handlers?.message({ ch: 's', round: 1, type: 'round', data: 1 }, 'a');
+    handlers?.join('a');
+    expect(s.state).toMatchObject({ status: 'playing', role: 'guest', round: 1 });
+    expect(sent.filter((m) => m.type === 'full')).toEqual([]);
+  });
+});
+
+describe('nostrTransport', () => {
+  it('meldet ohne sicheren Kontext einen verständlichen Fehler', async () => {
+    const { nostrTransport } = await import('./net.ts');
+    const secure = Object.getOwnPropertyDescriptor(globalThis, 'isSecureContext');
+    Object.defineProperty(globalThis, 'isSecureContext', { value: false, configurable: true });
+    const states: NetState[] = [];
+    new NetSession(nostrTransport('snake', 'ABC234'), 'versus', {
+      change: (s) => states.push(s),
+      pause: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    if (secure) Object.defineProperty(globalThis, 'isSecureContext', secure);
+    else Reflect.deleteProperty(globalThis, 'isSecureContext');
+    expect(states.at(-1)).toMatchObject({ status: 'error', reason: 'insecure' });
+  });
+});
+
+describe('Verbindungsfehler', () => {
+  it('zeigt die Ursache, bis doch ein Mitspieler durchkommt', async () => {
+    let handlers: TransportHandlers | undefined;
+    const s = new NetSession(
+      async (h) => {
+        handlers = h;
+        return { selfId: 'a', send: () => {}, leave: () => {} };
+      },
+      'versus',
+      { change: () => {}, pause: () => {} },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handlers?.fail('could not connect to peer x after exchanging SDP');
+    expect(s.state).toMatchObject({ status: 'error', reason: 'p2p' });
+    expect(s.state.detail).toContain('SDP');
+    handlers?.join('b');
+    expect(s.state).toMatchObject({ status: 'playing', role: 'host', detail: undefined });
+  });
+});

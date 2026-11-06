@@ -1,0 +1,169 @@
+# opencode baut Games, Features und Bugfixes aus Issues. Läuft nur mit Zustimmung:
+#  1. Eine Person mit Schreibrechten setzt das Label "approved".
+#  2. Das Environment "agent" verlangt zusätzlich einen Reviewer (Approve-Button pro Run).
+#     Einrichten unter Settings > Environments > agent > Required reviewers.
+#
+# Sicherheit: Der Job mit dem Modell hat nur Leserechte und keine Git-Credentials.
+# Er liefert einen Patch. Erst der PR-Job (ohne Modell) schreibt ins Repo.
+#
+# Konfiguration: Variable OPENCODE_MODEL (z. B. anthropic/claude-haiku-4-5) und das Secret des Providers.
+name: Agent
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    if: github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+    steps:
+      - name: Auslöser braucht Schreibrechte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SENDER: ${{ github.event.sender.login }}
+          REPO: ${{ github.repository }}
+        run: |
+          permission="$(gh api "repos/$REPO/collaborators/$SENDER/permission" --jq .permission)"
+          echo "$SENDER: $permission"
+          case "$permission" in
+            admin|maintain|write) ;;
+            *) echo "::error::$SENDER hat keine Schreibrechte"; exit 1 ;;
+          esac
+
+  agent:
+    needs: authorize
+    runs-on: ubuntu-latest
+    environment: agent
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      kind: ${{ steps.prepare.outputs.kind }}
+      folder: ${{ steps.prepare.outputs.folder }}
+      branch: ${{ steps.prepare.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Issue lesen und prüfen
+        id: prepare
+        run: node scripts/ci/prepare.ts
+
+      - name: Anhänge laden und auf Viren scannen
+        if: steps.prepare.outputs.kind == 'game-request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FOLDER: ${{ steps.prepare.outputs.folder }}
+        run: |
+          if [ -s .agent/attachments.txt ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq clamav
+            sudo systemctl stop clamav-freshclam || true
+            sudo freshclam --quiet
+            scripts/ci/download-attachments.sh .agent/attachments.txt "games/$FOLDER/assets"
+            node scripts/ci/register-assets.ts "$FOLDER"
+          fi
+
+      - name: opencode installieren
+        run: npm install -g opencode-ai@${{ vars.OPENCODE_VERSION || 'latest' }}
+
+      - name: opencode ausführen
+        env:
+          MODEL: ${{ vars.OPENCODE_MODEL }}
+          KIND: ${{ steps.prepare.outputs.kind }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          case "$KIND" in
+            game-request) skill=new-game ;;
+            feature) skill=game-feature ;;
+            bug) skill=game-bugfix ;;
+          esac
+          opencode run --auto ${MODEL:+--model "$MODEL"} --file .agent/task.md \
+            "Lies AGENTS.md. Erledige die Aufgabe aus der angehängten Datei task.md mit dem Skill \"$skill\". Beende erst, wenn \"npm run gate\" grün ist."
+
+      - name: Quality Gate (mit einem Korrekturversuch)
+        env:
+          MODEL: ${{ vars.OPENCODE_MODEL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          npm run sync:forms
+          if ! npm run gate > .agent/gate.log 2>&1; then
+            tail -n 80 .agent/gate.log
+            opencode run --auto --continue ${MODEL:+--model "$MODEL"} --file .agent/gate.log \
+              "Das Quality Gate ist fehlgeschlagen, Log im Anhang. Behebe die Fehler mit dem Skill \"quality-gate\"."
+            npm run sync:forms
+            npm run gate
+          fi
+
+      - name: Smoke-Test
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Umfang prüfen und Patch erzeugen
+        env:
+          KIND: ${{ steps.prepare.outputs.kind }}
+          FOLDER: ${{ steps.prepare.outputs.folder }}
+        run: |
+          rm -rf .agent test-results playwright-report
+          git add -A
+          git diff --cached --name-only | node scripts/ci/check-scope.ts "$KIND" "$FOLDER"
+          git diff --cached --binary > agent.patch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-patch
+          path: agent.patch
+          retention-days: 7
+
+  pull-request:
+    needs: agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-patch
+          path: ${{ runner.temp }}
+      - name: Branch, Commit und Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.agent.outputs.branch }}
+          KIND: ${{ needs.agent.outputs.kind }}
+          FOLDER: ${{ needs.agent.outputs.folder }}
+          NUMBER: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+        run: |
+          git config user.name "vibegames-agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git apply --index "$RUNNER_TEMP/agent.patch"
+          git commit -m "$TITLE (#$NUMBER)"
+          git push --force origin "$BRANCH"
+          body="$(printf 'Closes #%s\n\nErstellt von opencode (%s, %s). Quality Gate und Smoke-Test sind im Agent-Run gelaufen.\n' "$NUMBER" "$KIND" "${FOLDER:-core}")"
+          gh pr create --head "$BRANCH" --title "$TITLE" --body "$body" \
+            || gh pr edit "$BRANCH" --body "$body"
+          gh issue comment "$NUMBER" --body "Pull Request ist bereit: $(gh pr view "$BRANCH" --json url --jq .url)"

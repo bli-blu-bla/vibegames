@@ -1,0 +1,9 @@
+{
+  "title": "Stellwerk",
+  "description": "Stell die Weichen, damit jeder Zug in seinen Bahnhof fährt. Eine Schicht dauert drei Minuten.",
+  "category": "denken",
+  "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
+  "controls": "Weiche antippen oder Tasten 1 bis 9, Zug antippen bremst, Kuh antippen vertreibt",
+  "credits": [],
+  "multiplayer": "coop"
+}

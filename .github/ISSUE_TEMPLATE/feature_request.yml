@@ -1,0 +1,30 @@
+name: Feature Request
+description: Eine Erweiterung für ein bestehendes Spiel.
+title: "[Feature] "
+labels: ["feature"]
+body:
+  - type: dropdown
+    id: game
+    attributes:
+      label: Spiel
+      description: Die Liste wird mit "npm run sync:forms" erzeugt.
+      options:
+        # games:start
+        - Pinguin-Schach (pinguin-schach)
+        - Pixel-Snake (snake)
+        - Stellwerk (stellwerk)
+        - Trumpf & Prügel (trumpf-pruegel)
+        # games:end
+    validations:
+      required: true
+  - type: textarea
+    id: feature
+    attributes:
+      label: Was soll dazukommen?
+      description: Klein halten. Ein Feature pro Issue.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Warum?

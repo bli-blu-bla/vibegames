@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLEIS-GAUDI 3000 – Bundesbahn-Wahnsinn im Stellwerk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=JetBrains+Mono:wght@500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- TOP CONTROL PANEL (STELLWERK HEADER) -->
+    <header class="stellwerk-header">
+      <div class="brand-badge">
+        <div class="db-parody-logo">GG</div>
+        <div class="brand-titles">
+          <h1>GLEIS-GAUDI <span class="model-tag">STELLWERK 3000</span></h1>
+          <p class="subtitle">Zentrales Chaos-Leitsystem • „Pünktlichkeit ist eine Illusion“</p>
+        </div>
+      </div>
+
+      <!-- FLIP-BOARD DEPARTURE TICKER -->
+      <div class="zza-board" id="zza-board">
+        <div class="zza-header">
+          <span>ZUG-NR.</span>
+          <span>NÄCHSTER HALT / STATUS</span>
+          <span>HINWEIS</span>
+        </div>
+        <div class="zza-row" id="zza-row">
+          <span class="zza-train" id="zza-train">ICE 404</span>
+          <span class="zza-dest" id="zza-dest">Sucht noch den richtigen Bahnhof</span>
+          <span class="zza-delay" id="zza-delay">+42 Min</span>
+        </div>
+      </div>
+
+      <!-- SCORE & STATS LEDs -->
+      <div class="telemetry-rack">
+        <div class="led-module">
+          <span class="led-label">FAHRGÄSTE GLÜCKLICH</span>
+          <div class="led-value green" id="stat-score">000</div>
+        </div>
+        <div class="led-module">
+          <span class="led-label">KOMBO-TAKT</span>
+          <div class="led-value amber" id="stat-combo">x1</div>
+        </div>
+        <div class="led-module">
+          <span class="led-label">VORSTANDS-GEDULD</span>
+          <div class="patience-hearts" id="stat-lives">
+            <span class="heart active">☕</span>
+            <span class="heart active">☕</span>
+            <span class="heart active">☕</span>
+          </div>
+        </div>
+        <div class="led-module">
+          <span class="led-label">SCHICHT-ZEIT</span>
+          <div class="led-value cyan" id="stat-time">03:00</div>
+        </div>
+      </div>
+
+      <!-- QUICK CONTROLS -->
+      <div class="header-buttons">
+        <button class="brass-btn" id="btn-excuse" title="Ausreden-Generator durchsagen (Taste E)">
+          📢 Durchsage <kbd>E</kbd>
+        </button>
+        <button class="brass-btn" id="btn-coffee" title="Express-Kaffee für alle Züge (Taste C)">
+          ☕ Turbo-Kaffee <kbd>C</kbd>
+        </button>
+        <button class="brass-btn icon-only" id="btn-mute" title="Sound An/Aus (Taste M)">
+          🔊
+        </button>
+        <button class="brass-btn danger" id="btn-menu" title="Zurück zum Hauptmenü (ESC)">
+          ⚙️ Menü
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN GAME WORKSPACE -->
+    <main class="Diorama-container">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+        <!-- CO-OP ZONE OVERLAY INDICATOR -->
+        <div id="coop-divider" class="coop-divider hidden">
+          <div class="zone-tag p1-tag">👈 P1: WEST-FAHRDIENST (WASD + LEERTASTE)</div>
+          <div class="zone-line"></div>
+          <div class="zone-tag p2-tag">P2: OST-FAHRDIENST (PFEILTASTEN + ENTER) 👉</div>
+        </div>
+
+        <!-- LOUDSPEAKER POPUP BANNER -->
+        <div id="pa-toast" class="pa-toast hidden">
+          <div class="pa-icon">📢</div>
+          <div class="pa-content">
+            <div class="pa-title">BAHNSTEIG-DURCHSAGE:</div>
+            <div class="pa-text" id="pa-text">„Information zu ICE 666: Heute leider mit umgekehrter Wagenreihung und ohne Lok.“</div>
+          </div>
+        </div>
+
+        <!-- CHAOS EVENT BANNER -->
+        <div id="event-banner" class="event-banner hidden">
+          <span class="event-icon" id="event-icon">🐄</span>
+          <div class="event-info">
+            <strong id="event-title">BUNTES RINDVIEH AUF GLEIS 4!</strong>
+            <span id="event-desc">Klicke oder drücke Aktionstaste auf die Kuh Berta, um sie mit Löwenzahn wegzulocken!</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM CONTROLS & TRAIN TELEMETRY BAR -->
+      <footer class="stellwerk-footer">
+        <div class="active-trains-panel">
+          <div class="panel-title">AKTIVE ZÜGE IM SEKTOR <span class="hint">(Klick auf Zug = Notbremsung / Freigabe)</span></div>
+          <div class="train-cards" id="train-cards">
+            <!-- Dynamically populated train status pills -->
+          </div>
+        </div>
+
+        <div class="controls-legend">
+          <div class="legend-item">
+            <span class="key-badge">🖱️ Klick</span> Weiche schalten / Zug stoppen / Kuh verscheuchen
+          </div>
+          <div class="legend-item">
+            <span class="key-badge">WASD</span> + <span class="key-badge">SPACE</span> Fahrdienstleiter 1 (Blau)
+          </div>
+          <div class="legend-item">
+            <span class="key-badge">⬆️⬅️⬇️➡️</span> + <span class="key-badge">ENTER</span> Fahrdienstleiter 2 (Orange)
+          </div>
+          <div class="legend-item">
+            <span class="key-badge">1-9</span> Weichen direkt schalten
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <!-- START / MODE SELECTION MODAL -->
+    <div id="modal-start" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header-badge">HERZLICH WILLKOMMEN IM STELLWERK</div>
+        <h2 class="modal-title">🚂 GLEIS-GAUDI 3000</h2>
+        <p class="modal-lead">
+          Das einzigartige <strong>Holzeisenbahn-Stellwerk-Chaos-Spiel</strong>! Leitet verrückte Züge wie den <em>Bummel-Bock</em>, die <em>Koffein-Rakete</em> oder den <em>Schlafwagen-Schleicher</em> sicher in ihren farblich passenden Zielbahnhof!
+        </p>
+
+        <div class="mode-selector">
+          <button class="mode-card selected" data-mode="single" id="select-single">
+            <div class="mode-emoji">🧑‍✈️</div>
+            <h3>SOLO-SCHICHT (Singleplayer)</h3>
+            <p>Du allein gegen den Fahrplan! Steuere bequem per <strong>Mausklick</strong>, <strong>Zifferntasten (1–8)</strong> oder <strong>WASD</strong> das gesamte Gleisnetz.</p>
+            <span class="mode-pill">Ideal für Taktiker & Chaos-Dompteure</span>
+          </button>
+
+          <button class="mode-card" data-mode="coop" id="select-coop">
+            <div class="mode-emoji">🧑‍✈️🤝👩‍✈️</div>
+            <h3>CO-OP DOPPELSCHICHT (2 Spieler)</h3>
+            <p>Couch-Co-Op an einer Tastatur (+ Maus)! <strong>Spieler 1 (WASD + Space)</strong> & <strong>Spieler 2 (Pfeiltasten + Enter)</strong> teilen sich das Stellwerk oder flitzen gemeinsam übers Brett!</p>
+            <span class="mode-pill">Perfekt für 2 Freunde & Brüll-Momente</span>
+          </button>
+        </div>
+
+        <div class="level-selector">
+          <label class="section-label">SCHWIERIGKEIT & STRECKENNETZ WÄHLEN:</label>
+          <div class="difficulty-pills">
+            <button class="diff-btn active" data-diff="relaxed">
+              🌼 Gemütliche Nebenbahn <small>(Entspanntes Tempo)</small>
+            </button>
+            <button class="diff-btn" data-diff="rushhour">
+              ⚡ Feierabend-Wahnsinn <small>(Mehr Züge, Kühe & Chaos)</small>
+            </button>
+            <button class="diff-btn" data-diff="hardcore">
+              🔥 Hauptbahnhof-Endstufe <small>(Für echte Stellwerk-Legenden)</small>
+            </button>
+          </div>
+        </div>
+
+        <div class="how-to-box">
+          <div class="rule-chip">
+            <span class="chip-icon">🔀</span>
+            <div><strong>Weichen stellen:</strong> Schalte die Weichen rechtzeitig, damit jeder Zug zum <strong>gleichfarbigen Bahnhof</strong> rollt.</div>
+          </div>
+          <div class="rule-chip">
+            <span class="chip-icon">🛑</span>
+            <div><strong>Züge anhalten:</strong> Klicke auf einen Zug (oder schalte ihn per Cursor), um für 3 Sek. die Notbremse zu ziehen!</div>
+          </div>
+          <div class="rule-chip">
+            <span class="chip-icon">🐄</span>
+            <div><strong>Strecken-Störungen:</strong> Verscheuche grasende Kühe, repariere Signalstörungen & sammle goldene Kaffeetassen!</div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="start-game-btn" id="btn-start-game">
+            🚦 SIGNAL AUF GRÜN – SCHICHT STARTEN!
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME OVER / SHIFT REPORT MODAL -->
+    <div id="modal-gameover" class="modal-overlay hidden">
+      <div class="modal-card report-card">
+        <div class="modal-header-badge" id="report-badge">SCHICHT-ABRECHNUNG</div>
+        <h2 class="modal-title" id="report-title">FEIERABEND IM STELLWERK!</h2>
+        <p class="modal-lead" id="report-subtitle">Der Bahnvorstand hat deine Akte geprüft...</p>
+
+        <div class="report-stats-grid">
+          <div class="report-stat">
+            <span class="r-label">PÜNKTLICHE ZÜGE</span>
+            <span class="r-val" id="rep-delivered">0</span>
+          </div>
+          <div class="report-stat">
+            <span class="r-label">GESAMTPUNKTE</span>
+            <span class="r-val highlight" id="rep-score">0</span>
+          </div>
+          <div class="report-stat">
+            <span class="r-label">MAX. KOMBO</span>
+            <span class="r-val" id="rep-combo">x1</span>
+          </div>
+          <div class="report-stat">
+            <span class="r-label">VERSCHEUCHTE KÜHE</span>
+            <span class="r-val" id="rep-cows">0</span>
+          </div>
+        </div>
+
+        <div class="rank-certificate">
+          <div class="rank-label">OFFIZIELLER DIENSTGRAD:</div>
+          <div class="rank-title" id="rep-rank">Ehren-Schrankenwärter von Castrop-Rauxel</div>
+          <div class="rank-quote" id="rep-quote">„Immerhin sind 80% der Züge auf den Schienen geblieben!“</div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="start-game-btn" id="btn-restart-game">
+            🔄 NÄCHSTE SCHICHT STARTEN
+          </button>
+          <button class="secondary-btn" id="btn-back-menu">
+            📋 Modus wechseln
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
