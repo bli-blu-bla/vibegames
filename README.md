@@ -3,6 +3,67 @@
 Kleine, schlichte Browser-Games für zwischendurch. Neue Games, Features und Bugfixes kommen über
 GitHub Issues, opencode baut sie als Pull Request. Die Galerie läuft auf GitHub Pages.
 
+## Spiel vorschlagen
+
+Neue Spiele wünscht man sich über das Formular
+[Game Request](https://github.com/bli-blu-bla/vibegames/issues/new?template=game_request.yml).
+Wer die Idee erst mit einem KI-Assistenten (ChatGPT, Claude, Gemini …) ausarbeiten möchte, kopiert
+diesen Prompt in einen neuen Chat und ersetzt die letzte Zeile durch die eigene Idee. Der Assistent
+stellt Rückfragen, hält das Spiel klein und gibt am Ende alle Felder fertig zum Einfügen aus.
+
+```text
+Du hilfst mir, eine Spielidee für "VibeGames" auszuarbeiten, eine Sammlung kleiner Browser-Games
+für zwischendurch. Das Ergebnis trage ich in dieses GitHub-Issue-Formular ein:
+https://github.com/bli-blu-bla/vibegames/issues/new?template=game_request.yml
+Danach baut ein KI-Agent das Spiel allein aus meinem Formular. Was dort nicht klar steht, rät er.
+
+Falls du Links öffnen kannst, lies vorher diese beiden Dateien. Sie sind aktueller als dieser Prompt:
+- Formular-Definition: https://raw.githubusercontent.com/bli-blu-bla/vibegames/main/.github/ISSUE_TEMPLATE/game_request.yml
+- Regeln für den Agenten: https://raw.githubusercontent.com/bli-blu-bla/vibegames/main/AGENTS.md
+Kannst du keine Links öffnen, reicht der Rest dieses Prompts.
+
+Rahmen, an den du dich hältst:
+- In unter zwei Minuten verstanden, eine Runde dauert wenige Minuten.
+- Kein Menü, keine Einstellungen, keine Level-Auswahl, kein Login, keine Story.
+  Einzige Ausnahme: die Stufen Leicht, Mittel, Schwer, wenn das Spiel stark vom Können abhängt
+  (Computer-Gegner, Tempo, Rätselgröße, Zeitlimit). Wird es von selbst schwerer, keine Stufen.
+- Ein Spieler im Browser, mit Tastatur und mit Touch (Wischen, Joystick oder Tippen) spielbar.
+  Online zu zweit nur, wenn es wirklich passt (rundenbasiert gegeneinander oder gemeinsam).
+- Schlichte, flache 2D-Grafik aus einfachen Formen, höchstens vier Farben im Spielfeld.
+- Eine eigene Idee oder ein bekanntes Genre, aber keine Kopie eines bestimmten Spiels
+  (kein fremder Name, keine fremden Figuren, Level oder Grafiken).
+- Eine einzige Wertung: Punkte (mehr ist besser), Zeit oder Züge (weniger ist besser).
+
+So gehst du vor:
+1. Frag mich nach meiner Idee, falls sie unten fehlt.
+2. Stell mir höchstens fünf kurze Rückfragen auf einmal, nur zu dem, was für die Regeln noch
+   offen ist: Ziel, Ablauf, Spielende, Wertung, Steuerung, Schwierigkeit.
+3. Ist die Idee zu groß, schlag vor, was wegfallen kann, und erklär kurz warum.
+4. Fasse dann alles in genau diesen Feldern des Formulars zusammen, jedes Feld in einem eigenen
+   Codeblock, damit ich es einzeln kopieren kann:
+
+   Titel: Name des Spiels, kurz, auf Deutsch oder Englisch
+   Ordnername: nur Kleinbuchstaben, Ziffern und Bindestrich, z. B. pixel-snake
+   Kurzbeschreibung: ein Satz, höchstens 120 Zeichen, Du-Form
+   Kategorie: genau eins von: Arcade | Denken | Karten und Würfel
+   Spielregeln: Stichpunkte zu Ziel, Ablauf, Spielende und Zählweise. Konkrete Zahlen nennen
+     (Feldgröße, Tempo, Leben, Punkte pro Aktion). Bei Stufen eine Zeile pro Stufe mit den Werten,
+     die sich ändern. Bei Online-Modus kurz, wie zwei Spieler zusammen spielen.
+   Steuerung: eine Zeile für Tastatur und Touch, z. B. Pfeiltasten, WASD oder Wischen
+   Wertung: genau eins von: Punkte (mehr ist besser) | Zeit (weniger ist besser) |
+     Züge (weniger ist besser)
+   Assets: meist leer lassen. Nur wenn ich eigene Bilder oder Sounds habe: was es ist und
+     woher es stammt (selbst gemacht oder CC0).
+
+Schreib alles auf Deutsch.
+
+Meine Idee: <hier deine Idee in ein, zwei Sätzen>
+```
+
+Danach die Felder in das Formular übernehmen. Eine Person mit Schreibrechten setzt das Label
+`approved`, dann baut opencode das Spiel als Pull Request. Die Links im Prompt funktionieren nur,
+solange das Repo öffentlich ist. Sonst nutzt der Assistent die Feldliste im Prompt.
+
 ## Lokal
 
 ```bash
