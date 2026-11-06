@@ -76,7 +76,7 @@ braucht es keinen eigenen Server und GitHub Pages reicht.
 1. Settings → Pages → Source: GitHub Actions.
 2. Labels anlegen: `game-request`, `bug`, `feature`, `approved`.
 3. OpenCode-Konsole → Credential für GitHub Actions (OIDC, Branch `main`, Models mehr als „Read“).
-   Dessen ID steht als `client_id` in `agent.yml`, ein Secret ist nicht nötig.
+   Dessen ID (`sk_…`) als Secret `OPENCODE_CLIENT_ID` anlegen.
 4. Variable `OPENCODE_MODEL` (z. B. `opencode-go/claude-haiku-5-5`), optional `OPENCODE_VERSION`
    (Version von `@opencode/cli`).
 5. Settings → Actions → General: "Allow GitHub Actions to create and approve pull requests".

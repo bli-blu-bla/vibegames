@@ -3,9 +3,10 @@
 #
 # Sicherheit: Der Job mit dem Modell hat nur Leserechte und keine Git-Credentials.
 # Er liefert einen Patch. Erst der PR-Job (ohne Modell) schreibt ins Repo.
-# Anmeldung bei OpenCode per OIDC: kein Secret im Repo, der Token gilt eine Stunde.
+# Anmeldung bei OpenCode per OIDC, der Token gilt eine Stunde.
 #
-# Konfiguration (Repo-Variablen): OPENCODE_MODEL (z. B. opencode-go/claude-haiku-5-5),
+# Konfiguration: Secret OPENCODE_CLIENT_ID (ID des Credentials in der OpenCode-Konsole),
+# Variablen OPENCODE_MODEL (z. B. opencode-go/claude-haiku-5-5),
 # optional OPENCODE_VERSION (Version von @opencode/cli).
 name: Agent
 
@@ -82,17 +83,17 @@ jobs:
       - name: opencode installieren
         run: npm install -g @opencode/cli@${{ vars.OPENCODE_VERSION || '2.2.5' }}
 
-      # Die client_id ist die ID des Credentials in der OpenCode-Konsole, kein Geheimnis.
       - name: Bei OpenCode anmelden
         env:
           AUDIENCE: https://opencode.ai/console
+          CLIENT_ID: ${{ secrets.OPENCODE_CLIENT_ID }}
         run: |
           oidc=$(curl -sSf --oauth2-bearer "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r .value)
           token=$(curl -sSf https://opencode.ai/console/auth/oauth/token \
             -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
             -d subject_token_type=urn:ietf:params:oauth:token-type:jwt \
-            -d client_id=sk_2e6c5f90-5f1d-4414-9290-ff613594443c \
+            -d client_id="$CLIENT_ID" \
             -d subject_token="$oidc" | jq -r .access_token)
           echo "::add-mask::$token"
           echo "OPENCODE_API_KEY=$token" >> "$GITHUB_ENV"
