@@ -66,8 +66,8 @@ braucht es keinen eigenen Server und GitHub Pages reicht.
 
 - **CI** (`ci.yml`): Gate und Smoke-Test für jeden PR und `main`.
 - **Pages** (`pages.yml`): Build und Deployment auf GitHub Pages bei Push auf `main`.
-- **Agent** (`agent.yml`): Label `approved` auf einem Issue (nur mit Schreibrechten) → Environment `agent`
-  (Required Reviewer) → Anhänge laden, Typ prüfen, ClamAV → opencode mit passendem Skill →
+- **Agent** (`agent.yml`): Label `approved` auf einem Issue (nur mit Schreibrechten) →
+  Anhänge laden, Typ prüfen, ClamAV → OIDC-Anmeldung bei OpenCode → opencode mit passendem Skill →
   Gate (ein Korrekturversuch) → Smoke-Test → Umfang-Check → Patch. Ein separater Job ohne Modell
   erstellt daraus Branch und Pull Request.
 
@@ -75,8 +75,8 @@ braucht es keinen eigenen Server und GitHub Pages reicht.
 
 1. Settings → Pages → Source: GitHub Actions.
 2. Labels anlegen: `game-request`, `bug`, `feature`, `approved`.
-3. Settings → Environments → `agent` mit Required Reviewers.
-4. Variable `OPENCODE_MODEL` (z. B. `opencode-go/claude-haiku-5-5`), optional `OPENCODE_VERSION`,
-   und das Secret des Providers (`OPENCODE_API_KEY` für OpenCode Go/Zen, sonst `ANTHROPIC_API_KEY`,
-   `OPENAI_API_KEY` oder `OPENROUTER_API_KEY`).
+3. OpenCode-Konsole → Credential für GitHub Actions (OIDC, Branch `main`, Models mehr als „Read“).
+   Dessen ID steht als `client_id` in `agent.yml`, ein Secret ist nicht nötig.
+4. Variable `OPENCODE_MODEL` (z. B. `opencode-go/claude-haiku-5-5`), optional `OPENCODE_VERSION`
+   (Version von `@opencode/cli`).
 5. Settings → Actions → General: "Allow GitHub Actions to create and approve pull requests".

@@ -1,13 +1,12 @@
-# opencode baut Games, Features und Bugfixes aus Issues. Läuft nur mit Zustimmung:
-#  1. Eine Person mit Schreibrechten setzt das Label "approved".
-#  2. Das Environment "agent" verlangt zusätzlich einen Reviewer (Approve-Button pro Run).
-#     Einrichten unter Settings > Environments > agent > Required reviewers.
+# opencode baut Games, Features und Bugfixes aus Issues. Läuft nur, wenn eine Person mit
+# Schreibrechten das Label "approved" setzt. Gemergt wird erst nach Review des Pull Requests.
 #
 # Sicherheit: Der Job mit dem Modell hat nur Leserechte und keine Git-Credentials.
 # Er liefert einen Patch. Erst der PR-Job (ohne Modell) schreibt ins Repo.
+# Anmeldung bei OpenCode per OIDC: kein Secret im Repo, der Token gilt eine Stunde.
 #
-# Konfiguration: Variable OPENCODE_MODEL (z. B. opencode-go/claude-haiku-5-5 oder
-# anthropic/claude-haiku-4-5) und das Secret des Providers (OPENCODE_API_KEY für OpenCode Go/Zen).
+# Konfiguration (Repo-Variablen): OPENCODE_MODEL (z. B. opencode-go/claude-haiku-5-5),
+# optional OPENCODE_VERSION (Version von @opencode/cli).
 name: Agent
 
 on:
@@ -44,10 +43,10 @@ jobs:
   agent:
     needs: authorize
     runs-on: ubuntu-latest
-    environment: agent
     timeout-minutes: 45
     permissions:
       contents: read
+      id-token: write
     outputs:
       kind: ${{ steps.prepare.outputs.kind }}
       folder: ${{ steps.prepare.outputs.folder }}
@@ -81,23 +80,33 @@ jobs:
           fi
 
       - name: opencode installieren
-        run: npm install -g opencode-ai@${{ vars.OPENCODE_VERSION || 'latest' }}
+        run: npm install -g @opencode/cli@${{ vars.OPENCODE_VERSION || '2.2.5' }}
+
+      # Die client_id ist die ID des Credentials in der OpenCode-Konsole, kein Geheimnis.
+      - name: Bei OpenCode anmelden
+        env:
+          AUDIENCE: https://opencode.ai/console
+        run: |
+          oidc=$(curl -sSf --oauth2-bearer "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r .value)
+          token=$(curl -sSf https://opencode.ai/console/auth/oauth/token \
+            -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+            -d subject_token_type=urn:ietf:params:oauth:token-type:jwt \
+            -d client_id=sk_2e6c5f90-5f1d-4414-9290-ff613594443c \
+            -d subject_token="$oidc" | jq -r .access_token)
+          echo "::add-mask::$token"
+          echo "OPENCODE_API_KEY=$token" >> "$GITHUB_ENV"
 
       - name: opencode ausführen
         env:
           MODEL: ${{ vars.OPENCODE_MODEL }}
           KIND: ${{ steps.prepare.outputs.kind }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           case "$KIND" in
             game-request) skill=new-game ;;
             feature) skill=game-feature ;;
             bug) skill=game-bugfix ;;
           esac
-          # Nachricht vor --file: --file nimmt in opencode 1.x alle folgenden Argumente als Dateien.
           opencode run --auto ${MODEL:+--model "$MODEL"} \
             "Lies AGENTS.md. Erledige die Aufgabe aus der angehängten Datei task.md mit dem Skill \"$skill\". Beende erst, wenn \"npm run gate\" grün ist." \
             --file .agent/task.md
@@ -105,10 +114,6 @@ jobs:
       - name: Quality Gate (mit einem Korrekturversuch)
         env:
           MODEL: ${{ vars.OPENCODE_MODEL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           npm run sync:forms
           if ! npm run gate > .agent/gate.log 2>&1; then
