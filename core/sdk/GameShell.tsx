@@ -16,7 +16,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { type ComponentType, useEffect, useMemo, useRef, useState } from 'react';
 import { formatScore, isBetter } from './format.ts';
-import { Lobby, MODE_LABEL, OnlineDialog, roomHash } from './Lobby.tsx';
+import { Lobby, modeLabel, OnlineDialog, roomHash } from './Lobby.tsx';
 import { useOnline } from './online.ts';
 import { randomSeed } from './rng.ts';
 import { useShellStore } from './shellStore.ts';
@@ -37,7 +37,8 @@ interface Props {
 
 /**
  * Rahmen für jedes Spiel: Leiste mit Zurück, Titel, Score, Rekord, Ton, Theme, Pause, Neustart.
- * Bei Spielen mit `multiplayer` zusätzlich Online-Spiel zu zweit (Lobby, gemeinsame Pause und Runde).
+ * Bei Spielen mit `multiplayer` zusätzlich Online-Spiel mit 2 bis `players` Spielern
+ * (Lobby, gemeinsame Pause und Runde).
  */
 export function GameShell({ meta, game: Game, room = null, localNet = false }: Props) {
   const { score, status, run, pause: localPause, restart: localRestart } = useShellStore();
@@ -46,6 +47,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
   const { session, state: net } = useOnline({
     gameId: meta.id,
     mode: meta.multiplayer,
+    maxPlayers: meta.players,
     room,
     localNet,
     onPause: (p) => {
@@ -155,7 +157,11 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
             <ArrowLeft size={20} />
           </a>
           <h1 className="t-heading">{meta.title}</h1>
-          {online && <span className="chip shell-online">Online</span>}
+          {online && (
+            <span className="chip shell-online">
+              Online{net && net.waiting > 0 ? ` · ${net.waiting} wartet` : ''}
+            </span>
+          )}
         </div>
         <div className="shell-group shell-stats">
           <div className="shell-stat">
@@ -235,7 +241,16 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
           {ready ? (
             <Game key={online ? `online-${round}` : run} api={api} paused={status !== 'playing'} />
           ) : (
-            net && room && <Lobby gameId={meta.id} room={room} state={net} localNet={localNet} />
+            net &&
+            room && (
+              <Lobby
+                gameId={meta.id}
+                room={room}
+                state={net}
+                localNet={localNet}
+                onStart={() => session?.start()}
+              />
+            )
           )}
           <AnimatePresence>
             {ready && (status !== 'playing' || dialog) && (
@@ -250,6 +265,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                   <OnlineDialog
                     gameId={meta.id}
                     mode={meta.multiplayer}
+                    players={meta.players}
                     localNet={localNet}
                     onClose={() => setDialog(false)}
                   />
@@ -282,7 +298,8 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
         <p className="t-mono-small muted">{meta.controls} · P Pause · R Neustart</p>
         {meta.multiplayer && !online && (
           <p className="t-small muted shell-hint">
-            <Globe size={16} aria-hidden /> {MODE_LABEL[meta.multiplayer]}: oben „Online spielen“
+            <Globe size={16} aria-hidden /> {modeLabel(meta.multiplayer, meta.players)}: oben
+            „Online spielen“
           </p>
         )}
         {meta.credits.length > 0 && (

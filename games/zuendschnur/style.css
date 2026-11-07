@@ -1,0 +1,53 @@
+.zs-root {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.zs-field {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.zs-hud {
+  margin: 0;
+  text-align: center;
+}
+
+.zs-bar {
+  width: 100%;
+  max-width: 624px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.zs-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.zs-choice legend {
+  float: left;
+  margin-right: var(--space-2);
+  line-height: 44px;
+}
+
+.zs-bomb {
+  min-width: 112px;
+  touch-action: manipulation;
+  user-select: none;
+}

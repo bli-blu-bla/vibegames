@@ -20,7 +20,8 @@ export function GameCard({ game, primary }: { game: GameMeta; primary: boolean }
         <h2 className="t-heading">{game.title}</h2>
         {game.multiplayer && (
           <p className="chip game-card-online">
-            <Users size={16} aria-hidden /> Online zu zweit
+            <Users size={16} aria-hidden />{' '}
+            {(game.players ?? 2) > 2 ? `Online bis zu ${game.players}` : 'Online zu zweit'}
           </p>
         )}
         <p className="muted">{game.description}</p>

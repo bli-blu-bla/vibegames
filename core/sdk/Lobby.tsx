@@ -1,4 +1,4 @@
-import { Copy, ShareNetwork, SpinnerGap, Users } from '@phosphor-icons/react';
+import { Copy, Play, ShareNetwork, SpinnerGap, Users } from '@phosphor-icons/react';
 import { type FormEvent, useState } from 'react';
 import { createRoomCode, type NetMode, type NetState, normalizeRoomCode } from './net.ts';
 
@@ -6,6 +6,12 @@ export const MODE_LABEL: Record<NetMode, string> = {
   versus: 'Zu zweit gegeneinander',
   coop: 'Zu zweit miteinander',
 };
+
+/** "Zu zweit gegeneinander" bzw. "Bis zu 4 gegeneinander" */
+export function modeLabel(mode: NetMode, players = 2) {
+  if (players <= 2) return MODE_LABEL[mode];
+  return `Bis zu ${players} ${mode === 'versus' ? 'gegeneinander' : 'miteinander'}`;
+}
 
 export const roomHash = (gameId: string, room: string | null, localNet = false) =>
   room ? `#/play/${gameId}?room=${room}${localNet ? '&net=local' : ''}` : `#/play/${gameId}`;
@@ -17,11 +23,13 @@ const NOTE =
 export function OnlineDialog({
   gameId,
   mode,
+  players = 2,
   localNet,
   onClose,
 }: {
   gameId: string;
   mode: NetMode;
+  players?: number;
   localNet: boolean;
   onClose(): void;
 }) {
@@ -40,7 +48,10 @@ export function OnlineDialog({
       <p id="online-title" className="t-heading shell-lobby-title">
         <Users size={24} weight="bold" aria-hidden /> Online spielen
       </p>
-      <p className="muted">{MODE_LABEL[mode]}. Du bekommst einen Code für deinen Mitspieler.</p>
+      <p className="muted">
+        {modeLabel(mode, players)}. Du bekommst einen Code für {players > 2 ? 'deine' : 'deinen'}{' '}
+        Mitspieler.
+      </p>
       <button type="button" className="btn btn-primary" onClick={() => go(createRoomCode())}>
         Raum erstellen
       </button>
@@ -77,11 +88,14 @@ export function Lobby({
   room,
   state,
   localNet,
+  onStart,
 }: {
   gameId: string;
   room: string;
   state: NetState;
   localNet: boolean;
+  /** Host bei mehr als zwei Spielern: Runde mit allen Anwesenden starten */
+  onStart?(): void;
 }) {
   const [copied, setCopied] = useState(false);
   const link = `${window.location.origin}${window.location.pathname}${roomHash(gameId, room, localNet)}`;
@@ -144,7 +158,7 @@ export function Lobby({
         </p>
         <p className="muted shell-message">
           {state.status === 'full'
-            ? 'Hier spielen schon zwei. Erstelle einen neuen Raum.'
+            ? `Hier spielen schon ${state.maxPlayers === 2 ? 'zwei' : state.maxPlayers}. Erstelle einen neuen Raum.`
             : 'Die Nostr-Relays sind gerade nicht erreichbar. Versuch es gleich noch mal.'}
         </p>
         {state.status === 'error' && <ErrorDetail detail={state.detail} />}
@@ -157,20 +171,38 @@ export function Lobby({
   }
 
   const paired = state.role !== null;
+  const group = state.maxPlayers > 2;
+  const canStart = group && state.role === 'host' && state.players >= 2;
   const title =
     state.status === 'connecting'
       ? 'Verbinde …'
-      : paired
-        ? 'Verbunden, gleich geht es los …'
-        : state.peerLeft
-          ? 'Dein Mitspieler ist gegangen.'
-          : 'Warte auf Mitspieler';
+      : state.queued
+        ? 'Die Runde läuft schon. Du bist ab der nächsten dabei.'
+        : group && paired
+          ? state.role === 'host'
+            ? 'Starte, wenn alle da sind'
+            : 'Verbunden, der Host startet …'
+          : paired
+            ? 'Verbunden, gleich geht es los …'
+            : state.peerLeft
+              ? 'Dein Mitspieler ist gegangen.'
+              : 'Warte auf Mitspieler';
 
   return (
     <div className="shell-lobby" role="status">
       <p className="t-heading shell-lobby-title">
         <SpinnerGap size={24} className="shell-spin" aria-hidden /> {title}
       </p>
+      {group && (
+        <p className="t-mono-small muted" data-testid="lobby-players">
+          {state.players} von {state.maxPlayers} Spielern
+        </p>
+      )}
+      {canStart && (
+        <button type="button" className="btn btn-primary" onClick={onStart}>
+          <Play size={20} weight="fill" /> Starten
+        </button>
+      )}
       <p className="t-label muted">CODE</p>
       <p className="t-score shell-code" data-testid="room-code">
         {room}
@@ -180,7 +212,7 @@ export function Lobby({
         eingeben.
       </p>
       <div className="shell-lobby-actions">
-        <button type="button" className="btn btn-primary" onClick={copy}>
+        <button type="button" className={canStart ? 'btn' : 'btn btn-primary'} onClick={copy}>
           <Copy size={20} /> {copied ? 'Kopiert' : 'Link kopieren'}
         </button>
         {canShare && (

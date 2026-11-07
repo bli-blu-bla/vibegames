@@ -35,3 +35,22 @@ test('Stellwerk: Pause und Neustart gelten für beide', async ({ context }) => {
   await expect(a.getByRole('img', { name: /Gleisnetz/ })).toBeVisible();
   await expect(b.getByRole('img', { name: /Gleisnetz/ })).toBeVisible();
 });
+
+test('Zündschnur: drei Spieler in einem Raum, der Host startet', async ({ context }) => {
+  const url = './#/play/zuendschnur?room=BMBX23&net=local';
+  const pages = [await context.newPage(), await context.newPage(), await context.newPage()];
+  for (const p of pages) await p.goto(url);
+  for (const p of pages)
+    await expect(p.getByTestId('lobby-players')).toHaveText('3 von 4 Spielern');
+  const hosts = [];
+  for (const p of pages)
+    if (await p.getByRole('button', { name: 'Starten', exact: true }).isVisible()) hosts.push(p);
+  expect(hosts).toHaveLength(1);
+  await hosts[0]?.getByRole('button', { name: 'Starten', exact: true }).click();
+  const seats = new Set<string>();
+  for (const p of pages) {
+    await expect(p.getByRole('img', { name: /Duell · 3 von 3 übrig/ })).toBeVisible();
+    seats.add((await p.getByText(/Du bist Spieler \d/).textContent()) ?? '');
+  }
+  expect(seats.size).toBe(3);
+});

@@ -18,6 +18,7 @@ body:
         - Stellwerk (stellwerk)
         - Tank Arena (tank-arena)
         - Trumpf & Prügel (trumpf-pruegel)
+        - Zündschnur (zuendschnur)
         # games:end
     validations:
       required: true

@@ -1,4 +1,4 @@
-// Online-Multiplayer für zwei Spieler. Die Shell baut die Verbindung auf, das Spiel bekommt `api.net`.
+// Online-Multiplayer für zwei bis vier Spieler (`players` in game.json, Standard 2). Die Shell baut die Verbindung auf, das Spiel bekommt `api.net`.
 //
 // Verbindung: WebRTC direkt zwischen den Browsern. Zum Finden nutzt Trystero öffentliche
 // Nostr-Relays, darum braucht es keinen eigenen Server und GitHub Pages reicht.
@@ -12,16 +12,24 @@ export interface GameNet {
   /** `host` entscheidet bei Koop (Simulation, Zufall). Bei `versus` z. B. Weiß. */
   readonly role: NetRole;
   readonly mode: NetMode;
+  /** Eigener Platz in dieser Runde: 0 = Host, 1 bis players-1 = Gäste. Zu zweit: Gast = 1. */
+  readonly seat: number;
+  /** Spieler in dieser Runde (2 bis `players` aus game.json) */
+  readonly players: number;
   /**
-   * Nachricht an den Mitspieler. Kommt zuverlässig und in Reihenfolge an.
+   * Nachricht verschicken. Kommt zuverlässig und in Reihenfolge an.
+   * Host: an alle Gäste. Gast: nur an den Host (Gäste reden nicht direkt miteinander).
    * `data` muss sich als JSON verschicken lassen (keine Funktionen, Maps, Klassen).
    */
   send(type: string, data?: unknown): void;
   /**
    * Nachrichten eines Typs empfangen. Liefert eine Funktion zum Abmelden.
+   * `seat` ist der Platz des Absenders (beim Gast immer 0, der Host).
    * Nachrichten, die vor dem Anmelden ankommen, werden zugestellt, sobald ein Empfänger da ist.
+   * Geht ein Gast mitten in der Runde und bleiben mindestens zwei, bekommt der Host `'$left'`
+   * mit dem Platz des Gasts als `data`.
    */
-  on<T = unknown>(type: string, handler: (data: T) => void): () => void;
+  on<T = unknown>(type: string, handler: (data: T, seat: number) => void): () => void;
 }
 
 // ---------- Transport ----------
@@ -161,8 +169,16 @@ export interface NetState {
   role: NetRole | null;
   /** Zählt bei jedem gemeinsamen (Neu-)Start hoch. Das Spiel wird dann neu gemountet. */
   round: number;
-  /** `true`, wenn der Mitspieler mitten im Spiel gegangen ist */
+  /** `true`, wenn ein Mitspieler mitten im Spiel gegangen ist und die Runde endete */
   peerLeft: boolean;
+  /** Spieler im Raum (Lobby) bzw. in der laufenden Runde, inklusive man selbst */
+  players: number;
+  /** Höchstens so viele Spieler pro Runde (aus game.json `players`, Standard 2) */
+  maxPlayers: number;
+  /** Gast ist im Raum, spielt aber erst ab der nächsten Runde mit */
+  queued: boolean;
+  /** Host: so viele Gäste warten auf die nächste Runde */
+  waiting: number;
   /**
    * Bei `error`: `insecure` = Seite nicht über HTTPS geladen, `network` = Relays nicht erreichbar,
    * `p2p` = Mitspieler gefunden, aber keine direkte Verbindung (TURN-Server nötig)
@@ -174,29 +190,63 @@ export interface NetState {
 
 export interface SessionEvents {
   change(state: NetState): void;
-  /** Der Mitspieler hat pausiert oder fortgesetzt */
+  /** Ein Mitspieler hat pausiert oder fortgesetzt */
   pause(paused: boolean): void;
 }
 
+/** Nachricht an das Spiel des Hosts, wenn ein Gast mitten in der Runde geht. `data` ist sein Platz. */
+export const LEFT_MESSAGE = '$left';
+
+interface Queued {
+  msg: Envelope;
+  seat: number;
+}
+
 /**
- * Paart genau zwei Browser, legt Host und Gast fest und synchronisiert Runden und Pause.
- * Spielnachrichten laufen über `game()`.
+ * Bringt 2 bis `maxPlayers` Browser in einem Raum zusammen. Ein Host, alle anderen sind Gäste
+ * (Stern: Gäste reden nur mit dem Host). Synchronisiert Runden und Pause.
+ *
+ * Ablauf: Wer noch keine Rolle hat, fragt den offenen Host (`ready`). Gibt es keinen, fragt er den
+ * Teilnehmer mit der kleinsten ID; der wird Host, sobald ihn jemand fragt. Bei zwei Spielern startet
+ * die Runde sofort, bei mehr startet der Host sie (`start()`) oder sie startet, wenn der Raum voll ist.
+ * Wer während einer Runde dazukommt, spielt ab der nächsten Runde mit.
  */
 export class NetSession {
-  state: NetState = { status: 'connecting', role: null, round: 0, peerLeft: false };
+  state: NetState;
   private transport: Transport | null = null;
-  private peer: string | null = null;
-  /** Alle sichtbaren Peers, auch abgewiesene. Geht der Partner, rückt einer nach (z. B. nach Neuladen). */
+  /** Alle sichtbaren Peers */
   private known = new Set<string>();
-  private handlers = new Map<string, Set<(data: unknown) => void>>();
-  private queue: Envelope[] = [];
+  /** Bekannte Hosts anderer Gruppen und ob sie noch Platz haben */
+  private hosts = new Map<string, boolean>();
+  /** Bei wem ohne Rolle schon angefragt wurde */
+  private asked: string | null = null;
+  /** Gast: ID des Hosts */
+  private hostId: string | null = null;
+  /** Host: alle Gäste im Raum, in Reihenfolge des Beitritts */
+  private members: string[] = [];
+  /** Plätze der laufenden Runde, Index = Platz (0 = Host). Gegangene bleiben als `null`. */
+  private roster: (string | null)[] = [];
+  private handlers = new Map<string, Set<(data: unknown, seat: number) => void>>();
+  private queue: Queued[] = [];
   private closed = false;
   private readonly events: SessionEvents;
   private readonly mode: NetMode;
+  private readonly max: number;
 
-  constructor(factory: TransportFactory, mode: NetMode, events: SessionEvents) {
+  constructor(factory: TransportFactory, mode: NetMode, events: SessionEvents, maxPlayers = 2) {
     this.events = events;
     this.mode = mode;
+    this.max = Math.max(2, Math.min(4, Math.floor(maxPlayers)));
+    this.state = {
+      status: 'connecting',
+      role: null,
+      round: 0,
+      peerLeft: false,
+      players: 1,
+      maxPlayers: this.max,
+      queued: false,
+      waiting: 0,
+    };
     // Erst im nächsten Microtask verbinden: Eine sofort wieder geschlossene Sitzung
     // (React StrictMode) meldet sich so gar nicht erst an.
     Promise.resolve()
@@ -208,7 +258,7 @@ export class NetSession {
           leave: (id) => this.onLeave(id),
           fail: (detail) => {
             console.warn('[VibeGames online]', detail);
-            if (!this.peer) this.set({ status: 'error', reason: 'p2p', detail });
+            if (!this.state.role) this.set({ status: 'error', reason: 'p2p', detail });
           },
         });
       })
@@ -216,6 +266,7 @@ export class NetSession {
         if (this.closed) return t.leave();
         this.transport = t;
         if (this.state.status === 'connecting') this.set({ status: 'waiting' });
+        this.evaluate();
       })
       .catch((e: unknown) => {
         if (this.closed) return;
@@ -225,35 +276,52 @@ export class NetSession {
       });
   }
 
-  /** Neustart: Der Host zählt die Runde hoch, der Gast fragt beim Host an. */
+  /** Host in der Lobby: Runde mit allen, die schon da sind, starten (ab zwei Spielern). */
+  start() {
+    if (this.state.role === 'host' && this.state.status !== 'playing' && this.members.length > 0) {
+      this.startRound(this.state.round + 1);
+    }
+  }
+
+  /** Neustart: Der Host zählt die Runde hoch, Gäste fragen beim Host an. */
   restart() {
     if (this.state.status !== 'playing') return;
     if (this.state.role === 'host') this.startRound(this.state.round + 1);
-    else this.sendShell('restart');
+    else this.toHost('restart');
   }
 
   pause(paused: boolean) {
-    this.sendShell('pause', paused);
+    if (this.state.status !== 'playing') return;
+    if (this.state.role === 'host')
+      this.toRoster({ ch: 's', round: this.state.round, type: 'pause', data: paused });
+    else this.toHost('pause', paused);
   }
 
   /** API für das Spiel dieser Runde. */
   game(): GameNet | null {
-    const { role, round } = this.state;
-    if (!role || this.state.status !== 'playing') return null;
+    const { role, round, status } = this.state;
+    if (!role || status !== 'playing') return null;
+    const self = this.transport?.selfId ?? '';
+    const seat = role === 'host' ? 0 : Math.max(0, this.roster.indexOf(self));
     return {
       role,
       mode: this.mode,
+      seat,
+      players: this.roster.length,
       send: (type, data) => {
-        if (this.state.round === round) this.post({ ch: 'g', round, type, data });
+        if (this.state.round !== round || this.state.status !== 'playing') return;
+        const msg: Envelope = { ch: 'g', round, type, data };
+        if (this.state.role === 'host') this.toRoster(msg);
+        else if (this.hostId) this.transport?.send(msg, this.hostId);
       },
-      on: <T>(type: string, handler: (data: T) => void) => {
-        const fn = handler as (data: unknown) => void;
+      on: <T>(type: string, handler: (data: T, seat: number) => void) => {
+        const fn = handler as (data: unknown, seat: number) => void;
         const set = this.handlers.get(type) ?? new Set();
         this.handlers.set(type, set);
         set.add(fn);
-        const waiting = this.queue.filter((m) => m.type === type);
-        this.queue = this.queue.filter((m) => m.type !== type);
-        for (const m of waiting) fn(m.data ?? null);
+        const waiting = this.queue.filter((q) => q.msg.type === type);
+        this.queue = this.queue.filter((q) => q.msg.type !== type);
+        for (const q of waiting) fn(q.msg.data ?? null, q.seat);
         return () => {
           set.delete(fn);
         };
@@ -267,85 +335,284 @@ export class NetSession {
     this.transport = null;
   }
 
+  // ---------- intern ----------
+
+  private get self() {
+    return this.transport?.selfId ?? '';
+  }
+
   private set(patch: Partial<NetState>) {
     this.state = { ...this.state, ...patch };
     this.events.change(this.state);
   }
 
-  private post(msg: Envelope) {
-    if (this.transport && this.peer) this.transport.send(msg, this.peer);
+  private sendTo(id: string, type: string, data?: unknown) {
+    this.transport?.send({ ch: 's', round: this.state.round, type, data }, id);
   }
 
-  private sendShell(type: string, data?: unknown) {
-    this.post({ ch: 's', round: this.state.round, type, data });
+  private toHost(type: string, data?: unknown) {
+    if (this.hostId) this.sendTo(this.hostId, type, data);
+  }
+
+  private toRoster(msg: Envelope, except?: string) {
+    for (const id of this.roster.slice(1)) {
+      if (id && id !== except) this.transport?.send(msg, id);
+    }
+  }
+
+  private open() {
+    return this.state.role === 'host' && this.members.length + 1 < this.max;
+  }
+
+  /** Host: allen, die noch nicht dazugehören, sagen, ob hier Platz ist. */
+  private announce(to?: string) {
+    if (this.state.role !== 'host') return;
+    const targets = to ? [to] : [...this.known].filter((id) => !this.members.includes(id));
+    for (const id of targets) this.sendTo(id, 'host', { open: this.open() });
+  }
+
+  /** Ohne Rolle: passenden Host suchen. */
+  private evaluate() {
+    if (this.state.role || !this.transport || this.closed) return;
+    const open = [...this.hosts].filter(([, o]) => o).map(([id]) => id);
+    let target: string | null = null;
+    if (open.length > 0) target = open.sort()[0] as string;
+    else if (this.hosts.size > 0) {
+      // Alle Hosts im Raum sind voll. Wird einer frei, meldet er sich.
+      this.asked = null;
+      if (this.state.status !== 'error') this.set({ status: 'full' });
+      return;
+    } else {
+      const min = [this.self, ...this.known].sort()[0] as string;
+      if (min !== this.self) target = min;
+    }
+    if (target && this.asked !== target) {
+      this.asked = target;
+      this.sendTo(target, 'ready');
+    }
+    if (!target) this.asked = null;
+    if (this.state.status === 'full') this.set({ status: 'waiting' });
+  }
+
+  private becomeHost() {
+    this.asked = null;
+    this.hostId = null;
+    this.members = [];
+    this.roster = [];
+    this.hosts.clear();
+    this.set({
+      role: 'host',
+      status: 'waiting',
+      reason: undefined,
+      detail: undefined,
+      queued: false,
+    });
+  }
+
+  /** Zurück auf "ohne Rolle", z. B. wenn der Host oder alle Gäste weg sind. */
+  private dropRole(peerLeft: boolean) {
+    const wasHost = this.state.role === 'host';
+    this.asked = null;
+    this.hostId = null;
+    this.members = [];
+    this.roster = [];
+    this.handlers.clear();
+    this.queue = [];
+    this.set({ status: 'waiting', role: null, peerLeft, players: 1, queued: false, waiting: 0 });
+    if (wasHost) for (const id of this.known) this.sendTo(id, 'nohost');
+    this.evaluate();
+  }
+
+  private lobbyUpdate() {
+    const players = this.members.length + 1;
+    if (this.state.status === 'playing') {
+      this.set({ waiting: this.members.length - (this.roster.length - 1) });
+    } else {
+      this.set({ players, waiting: 0 });
+      for (const id of this.members) this.sendTo(id, 'lobby', { players, max: this.max });
+    }
   }
 
   private startRound(round: number) {
     this.queue = [];
-    this.set({ status: 'playing', round, peerLeft: false });
-    this.sendShell('round', round);
+    this.roster = [this.self, ...this.members.slice(0, this.max - 1)];
+    this.set({
+      status: 'playing',
+      round,
+      peerLeft: false,
+      players: this.roster.length,
+      waiting: this.members.length - (this.roster.length - 1),
+    });
+    for (const id of this.members) this.sendTo(id, 'round', { round, seats: this.roster });
   }
 
   private onJoin(id: string) {
+    if (this.known.has(id)) return;
     this.known.add(id);
-    if (this.peer === id) return;
-    if (this.peer) {
-      // Schon zu zweit: Neuankömmling abweisen
-      this.transport?.send({ ch: 's', round: 0, type: 'full' }, id);
-      return;
-    }
-    this.pair(id);
-  }
-
-  private pair(id: string) {
-    this.peer = id;
-    this.state = { ...this.state, reason: undefined, detail: undefined };
-    const self = this.transport?.selfId ?? '';
-    // Fester Vergleich der IDs: beide Seiten kommen ohne Absprache auf dieselbe Rolle
-    const role: NetRole = self < id ? 'host' : 'guest';
-    this.set({ role, status: 'waiting' });
-    if (role === 'host') this.startRound(this.state.round + 1);
-    else this.sendShell('ready');
+    if (this.state.role === 'host') this.announce(id);
+    else if (!this.state.role) this.evaluate();
   }
 
   private onLeave(id: string) {
     this.known.delete(id);
-    if (id !== this.peer) return;
-    this.peer = null;
-    this.handlers.clear();
-    this.queue = [];
-    this.set({ status: 'waiting', role: null, peerLeft: this.state.status === 'playing' });
-    const next = this.known.values().next();
-    if (!next.done) this.pair(next.value);
+    this.hosts.delete(id);
+    if (this.asked === id) this.asked = null;
+    const { role, status } = this.state;
+    if (role === 'guest') {
+      if (id === this.hostId) this.dropRole(status === 'playing');
+      return;
+    }
+    if (role === 'host' && this.members.includes(id)) {
+      this.members = this.members.filter((m) => m !== id);
+      const seat = this.roster.indexOf(id);
+      if (status === 'playing' && seat > 0) {
+        this.roster = this.roster.map((r) => (r === id ? null : r));
+        const left = this.roster.filter(Boolean).length;
+        if (left >= 2) {
+          this.set({ players: left });
+          this.dispatch({ ch: 'g', round: this.state.round, type: LEFT_MESSAGE, data: seat }, 0);
+        } else if (this.members.length > 0) {
+          // Nur noch der Host in der Runde, aber Wartende da: neue Runde mit ihnen
+          this.startRound(this.state.round + 1);
+        } else {
+          this.dropRole(true);
+          return;
+        }
+      } else if (this.members.length === 0) {
+        this.dropRole(false);
+        return;
+      }
+      this.lobbyUpdate();
+      this.announce();
+      return;
+    }
+    this.evaluate();
+  }
+
+  private onReady(from: string) {
+    if (this.state.role === 'guest') return;
+    if (!this.state.role) {
+      // Nur Host werden, wenn man selbst niemanden anderen gefragt hat
+      if (this.asked && this.asked !== from) return;
+      this.becomeHost();
+    }
+    if (this.members.includes(from)) {
+      if (this.state.status === 'playing')
+        this.sendTo(from, 'round', { round: this.state.round, seats: this.roster });
+      else this.sendTo(from, 'lobby', { players: this.members.length + 1, max: this.max });
+      return;
+    }
+    if (!this.open()) {
+      this.sendTo(from, 'host', { open: false });
+      return;
+    }
+    this.members = [...this.members, from];
+    if (this.state.status === 'playing') {
+      this.sendTo(from, 'round', { round: this.state.round, seats: this.roster });
+      this.lobbyUpdate();
+    } else if (this.max === 2 || !this.open()) {
+      this.startRound(this.state.round + 1);
+    } else {
+      this.lobbyUpdate();
+    }
+    this.announce();
   }
 
   private onMessage(msg: Envelope, from: string) {
-    if (msg.ch === 's' && msg.type === 'full') {
-      // Der eigene Partner spielt schon mit jemand anderem. Wird er frei, meldet er sich.
-      if (from === this.peer) this.set({ status: 'full' });
-      return;
-    }
     // Nachricht kann vor dem Join-Ereignis ankommen: dann gilt sie als Beitritt
-    if (!this.peer && msg.ch === 's') this.onJoin(from);
-    if (from !== this.peer) return;
-    if (msg.ch === 's') {
-      if (msg.type === 'round' && typeof msg.data === 'number' && this.state.role === 'guest') {
-        this.queue = [];
-        this.set({ status: 'playing', round: msg.data, peerLeft: false });
-      }
-      if (msg.type === 'ready' && this.state.role === 'host' && this.state.status !== 'playing') {
-        this.startRound(this.state.round + 1);
-      }
-      if (msg.type === 'restart' && this.state.role === 'host') this.restart();
-      if (msg.type === 'pause' && msg.round === this.state.round) {
-        this.events.pause(msg.data === true);
-      }
-      return;
-    }
-    if (msg.round !== this.state.round || this.state.status !== 'playing') return;
+    if (msg.ch === 's' && !this.known.has(from)) this.onJoin(from);
+    if (msg.ch === 's') return this.onShell(msg, from);
+
+    const { role, status, round } = this.state;
+    if (msg.round !== round || status !== 'playing') return;
+    let seat = -1;
+    if (role === 'guest' && from === this.hostId) seat = 0;
+    if (role === 'host') seat = this.roster.indexOf(from);
+    if (seat < 0) return;
+    this.dispatch(msg, seat);
+  }
+
+  private dispatch(msg: Envelope, seat: number) {
     const set = this.handlers.get(msg.type);
-    if (set && set.size > 0) for (const fn of set) fn(msg.data ?? null);
-    else this.queue = [...this.queue.slice(-(QUEUE_MAX - 1)), msg];
+    if (set && set.size > 0) for (const fn of set) fn(msg.data ?? null, seat);
+    else this.queue = [...this.queue.slice(-(QUEUE_MAX - 1)), { msg, seat }];
+  }
+
+  private onShell(msg: Envelope, from: string) {
+    const { role } = this.state;
+    const data = (msg.data ?? {}) as Record<string, unknown>;
+    switch (msg.type) {
+      case 'ready':
+        return this.onReady(from);
+      case 'host': {
+        const open = data.open === true;
+        this.hosts.set(from, open);
+        if (!role) return this.evaluate();
+        // Zwei Gruppen in der Lobby: die mit der größeren Host-ID löst sich auf und geht rüber
+        if (role === 'host' && open && from < this.self && this.state.status !== 'playing') {
+          for (const id of this.members) this.sendTo(id, 'disband');
+          this.dropRole(false);
+        }
+        return;
+      }
+      case 'nohost':
+        this.hosts.delete(from);
+        if (!role) this.evaluate();
+        return;
+      case 'disband':
+        if (role === 'guest' && from === this.hostId) {
+          this.hosts.delete(from);
+          this.dropRole(false);
+        }
+        return;
+      case 'lobby':
+        if (!role && this.asked === from) {
+          this.hostId = from;
+          this.asked = null;
+          this.set({ role: 'guest', reason: undefined, detail: undefined });
+        }
+        if (this.state.role === 'guest' && from === this.hostId) {
+          this.set({ status: 'waiting', players: Number(data.players) || 2, queued: false });
+        }
+        return;
+      case 'round': {
+        const seats = Array.isArray(data.seats) ? (data.seats as (string | null)[]) : [];
+        const round = Number(data.round);
+        if (!Number.isFinite(round)) return;
+        if (!role) {
+          this.hostId = from;
+          this.asked = null;
+          this.set({ role: 'guest', reason: undefined, detail: undefined });
+        }
+        if (this.state.role !== 'guest' || from !== this.hostId) return;
+        if (seats.includes(this.self)) {
+          this.roster = seats;
+          this.queue = [];
+          this.set({
+            status: 'playing',
+            round,
+            peerLeft: false,
+            players: seats.filter(Boolean).length,
+            queued: false,
+          });
+        } else {
+          this.set({ status: 'waiting', queued: true, players: seats.filter(Boolean).length });
+        }
+        return;
+      }
+      case 'restart':
+        if (role === 'host' && this.roster.includes(from)) this.restart();
+        return;
+      case 'pause':
+        if (msg.round !== this.state.round || this.state.status !== 'playing') return;
+        if (role === 'host' && this.roster.includes(from)) {
+          this.toRoster(msg, from);
+          this.events.pause(msg.data === true);
+        } else if (role === 'guest' && from === this.hostId) {
+          this.events.pause(msg.data === true);
+        }
+        return;
+    }
   }
 }
 

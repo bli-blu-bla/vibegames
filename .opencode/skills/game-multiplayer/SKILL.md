@@ -16,12 +16,24 @@ den Browsern, gefunden über öffentliche Nostr-Relays (Trystero). Kein Server, 
 Gut: rundenbasiert gegeneinander (Brettspiele, Karten-Duelle), gemeinsames Echtzeit-Spiel auf einem
 Feld, bei dem beide dasselbe steuern (Koop). Schlecht: schnelle Reaktions-Duelle (Latenz), Spiele
 mit Geheiminformation, die man nicht verstecken kann (der Gegner sieht alle Nachrichten), mehr als
-zwei Spieler. **Im Zweifel weglassen** und im Issue begründen.
+zwei Spieler ohne Host-Simulation. **Im Zweifel weglassen** und im Issue begründen.
 
 ## Einschalten
 
 `game.json`: `"multiplayer": "versus"` (gegeneinander) oder `"coop"` (miteinander).
 Dann zeigt die Shell den Online-Knopf und die Galerie den Hinweis „Online zu zweit“.
+
+## Mehr als zwei Spieler
+
+`"players": 3` oder `4` in `game.json` (nur mit `multiplayer`, Standard 2). Dann sammelt die Lobby
+alle im Raum, der Host startet mit „Starten“ (oder automatisch, wenn der Raum voll ist). Wer während
+einer Runde kommt, spielt ab der nächsten mit. Sinnvoll nur mit Host-Simulation (Echtzeit-Muster).
+
+- `net.seat` ist der eigene Platz (0 = Host), `net.players` die Anzahl in dieser Runde.
+- Host-`send` geht an alle Gäste, Gast-`send` nur an den Host. Der Handler bekommt den Platz des
+  Absenders: `useNet(net, 'input', (data, seat) => …)`.
+- Geht ein Gast mitten in der Runde (und bleiben mindestens zwei), bekommt der Host `'$left'` mit dem
+  Platz. Beispiel: `games/zuendschnur`.
 
 ## API
 

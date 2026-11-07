@@ -1,0 +1,10 @@
+{
+  "title": "Zündschnur",
+  "description": "Leg Bomben, spreng Kisten und erwisch die Monster. Oder zu zweit am Gerät und bis zu viert online im Duell.",
+  "category": "arcade",
+  "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
+  "controls": "WASD oder Pfeiltasten, Leertaste legt eine Bombe, Joystick und Bomben-Knopf am Handy",
+  "credits": [],
+  "multiplayer": "versus",
+  "players": 4
+}

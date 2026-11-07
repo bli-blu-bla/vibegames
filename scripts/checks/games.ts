@@ -64,6 +64,12 @@ export function checkGames(): Report {
     if (game.multiplayer !== undefined && !['versus', 'coop'].includes(game.multiplayer)) {
       err('game.json: multiplayer ist versus oder coop (oder weglassen)');
     }
+    if (game.players !== undefined) {
+      if (!game.multiplayer) err('game.json: players nur zusammen mit multiplayer');
+      if (!Number.isInteger(game.players) || game.players < 2 || game.players > 4) {
+        err('game.json: players ist 2, 3 oder 4 (oder weglassen)');
+      }
+    }
     if (!Array.isArray(game.credits)) err('game.json: credits muss ein Array sein ([] wenn leer)');
     else {
       for (const c of game.credits) if (!credits.has(c)) err(`Credit "${c}" fehlt in credits/`);

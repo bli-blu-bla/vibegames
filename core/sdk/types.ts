@@ -32,6 +32,8 @@ export interface GameJson {
    * Weglassen, wenn das Spiel nur allein Sinn ergibt.
    */
   multiplayer?: NetMode;
+  /** Mit `multiplayer`: höchstens so viele Spieler online (2 bis 4). Weglassen = 2. */
+  players?: number;
 }
 
 export interface GameMeta extends GameJson {
