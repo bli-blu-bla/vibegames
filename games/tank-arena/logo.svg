@@ -1,0 +1,9 @@
+<!-- Panzer von oben mit Turm, Kanonenrohr und Explosionsfunke -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="10" y="14" width="32" height="8" rx="4" fill="currentColor" />
+  <rect x="10" y="42" width="32" height="8" rx="4" fill="currentColor" />
+  <rect x="14" y="20" width="24" height="24" rx="4" style="fill: var(--accent)" />
+  <circle cx="26" cy="32" r="7" fill="currentColor" />
+  <rect x="28" y="29" width="18" height="6" rx="3" fill="currentColor" />
+  <circle cx="52" cy="32" r="5" style="fill: var(--game-rose)" />
+</svg>

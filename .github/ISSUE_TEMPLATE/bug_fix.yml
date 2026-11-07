@@ -24,6 +24,7 @@ body:
         - Pinguin-Schach (pinguin-schach)
         - Pixel-Snake (snake)
         - Stellwerk (stellwerk)
+        - Tank Arena (tank-arena)
         - Trumpf & Prügel (trumpf-pruegel)
         # games:end
     validations:
