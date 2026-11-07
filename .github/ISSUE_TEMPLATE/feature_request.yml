@@ -10,6 +10,7 @@ body:
       description: Die Liste wird mit "npm run sync:forms" erzeugt.
       options:
         # games:start
+        - Gold-Gräber (gold-graeber)
         - Lichter aus (lichter-aus)
         - Minenfeld (minenfeld)
         - Pinguin-Schach (pinguin-schach)
