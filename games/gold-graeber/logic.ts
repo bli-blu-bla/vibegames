@@ -5,7 +5,12 @@ export const HEIGHT = 360;
 export const ORIGIN_X = WIDTH / 2;
 export const ORIGIN_Y = 50;
 export const GROUND_Y = 58;
-export const ROUND_TIME = 90;
+export const ROUND_TIME = 40;
+export const EXTRA_TIME = 15;
+export const EFFECT_ROUNDS = 3;
+export const WINCH_BONUS = 0.2;
+export const PRICE_STEP = 50;
+export const MAX_SKILL = 3;
 
 export const MIN_ROPE = 22;
 export const MAX_ROPE = 410;
@@ -16,7 +21,7 @@ export const EMPTY_REEL_SPEED = 290;
 export const HOOK_RADIUS = 7;
 export const TONIC_DURATION = 15;
 
-export type ItemKind = 'gold_small' | 'gold_large' | 'gem' | 'rock';
+export type ItemKind = 'gold_tiny' | 'gold_small' | 'gold_large' | 'gem' | 'rock';
 
 export interface ItemSpec {
   kind: ItemKind;
@@ -28,6 +33,14 @@ export interface ItemSpec {
 }
 
 export const ITEM_STATS: Record<ItemKind, ItemSpec> = {
+  gold_tiny: {
+    kind: 'gold_tiny',
+    label: 'Goldkrümel',
+    value: 10,
+    radius: 8,
+    weight: 0.6,
+    pullSpeed: 230,
+  },
   gold_small: {
     kind: 'gold_small',
     label: 'Goldklumpen',
@@ -116,12 +129,26 @@ export interface FieldItem {
   variant?: number;
 }
 
-export type ShopItemId = 'winch' | 'luck' | 'dynamite' | 'tonic';
+export type ShopItemId =
+  | 'winch'
+  | 'clock'
+  | 'gemSkill'
+  | 'goldSkill'
+  | 'luck'
+  | 'mason'
+  | 'sculptor'
+  | 'dynamite'
+  | 'tonic';
 
+/**
+ * timed: wirkt EFFECT_ROUNDS Runden, danach wieder kaufbar.
+ * skill: bis MAX_SKILL Stufen, dauerhaft.
+ * Alles außer consumable wird mit jedem Kauf um PRICE_STEP teurer.
+ */
 export interface ShopItemSpec {
   id: ShopItemId;
   name: string;
-  kind: 'upgrade' | 'consumable';
+  kind: 'timed' | 'skill' | 'consumable';
   cost: number;
   description: string;
 }
@@ -130,16 +157,51 @@ export const SHOP_ITEMS: readonly ShopItemSpec[] = [
   {
     id: 'winch',
     name: 'Starkes Seil',
-    kind: 'upgrade',
+    kind: 'timed',
     cost: 100,
-    description: 'Dauerhaft +35 % schnelleres Einziehen',
+    description: '+20 % schnelleres Einziehen für 3 Runden',
+  },
+  {
+    id: 'clock',
+    name: 'Taschenuhr',
+    kind: 'timed',
+    cost: 100,
+    description: '+15 Sek. Rundenzeit für 3 Runden',
+  },
+  {
+    id: 'gemSkill',
+    name: 'Edelsteinkunde',
+    kind: 'skill',
+    cost: 150,
+    description: 'Edelsteine sind mehr wert',
+  },
+  {
+    id: 'goldSkill',
+    name: 'Goldschmiede',
+    kind: 'skill',
+    cost: 150,
+    description: 'Gold ist mehr wert',
   },
   {
     id: 'luck',
     name: 'Glücksklee',
-    kind: 'upgrade',
+    kind: 'skill',
     cost: 120,
-    description: 'Dauerhaft mehr Edelsteine und großes Gold',
+    description: 'Mehr Edelsteine und großes Gold im Feld',
+  },
+  {
+    id: 'mason',
+    name: 'Steinmetz',
+    kind: 'skill',
+    cost: 80,
+    description: 'Steine sind 20 statt 10 Gold wert',
+  },
+  {
+    id: 'sculptor',
+    name: 'Bildhauer',
+    kind: 'skill',
+    cost: 120,
+    description: 'Steine sind 30 statt 20 Gold wert (nach Steinmetz)',
   },
   {
     id: 'dynamite',
@@ -157,12 +219,28 @@ export const SHOP_ITEMS: readonly ShopItemSpec[] = [
   },
 ];
 
+/** Edelsteinwert pro Skill-Stufe 0–3 */
+export const GEM_VALUES = [200, 275, 350, 450] as const;
+/** Goldfaktor pro Skill-Stufe 0–3 */
+/** Steinwert: ohne Skill, Steinmetz, Bildhauer */
+export const ROCK_VALUES = [10, 20, 30] as const;
+export const GOLD_FACTORS = [1, 1.2, 1.4, 1.7] as const;
+
 export type HookPhase = 'swinging' | 'shooting' | 'reeling';
 export type GamePhase = 'playing' | 'shop' | 'gameover';
 
 export interface Upgrades {
-  winch: number;
   luck: number;
+  gemSkill: number;
+  /** 0 = nichts, 1 = Steinmetz, 2 = Bildhauer */
+  rockSkill: number;
+  goldSkill: number;
+}
+
+/** Verbleibende Runden der zeitlich begrenzten Ausrüstung (0 = aus) */
+export interface Effects {
+  winch: number;
+  clock: number;
 }
 
 export interface Consumables {
@@ -174,6 +252,8 @@ export interface State {
   phase: GamePhase;
   round: number;
   target: number;
+  /** In der zuletzt beendeten Runde gezahlte Abgabe */
+  paidTax: number;
   money: number;
   score: number;
   timeLeft: number;
@@ -184,6 +264,9 @@ export interface State {
   grabbed: FieldItem | null;
   items: FieldItem[];
   upgrades: Upgrades;
+  effects: Effects;
+  /** Anzahl Käufe pro Item, bestimmt den Preis */
+  bought: Partial<Record<ShopItemId, number>>;
   consumables: Consumables;
   tonicTimer: number;
   shopPurchased: ShopItemId[];
@@ -196,10 +279,55 @@ export interface Input {
   useTonic?: boolean;
 }
 
-/** Steigendes Geldziel pro Runde (Runde 1: 250, Runde 2: 600, Runde 3: 1050, …) */
+/** Guthaben, das am Ende einer Runde mindestens da sein muss */
 export function roundTarget(round: number): number {
   const r = Math.max(1, Math.floor(round));
-  return 250 * r + 100 * ((r * (r - 1)) / 2);
+  return 400 + 200 * (r - 1) + 40 * (r - 1) * (r - 1);
+}
+
+/** Abgabe am Rundenende: die Hälfte des Ziels */
+export function roundTax(round: number): number {
+  return Math.floor(roundTarget(round) / 2);
+}
+
+export function itemValue(
+  kind: ItemKind,
+  skills: Pick<Upgrades, 'gemSkill' | 'goldSkill' | 'rockSkill'>,
+): number {
+  if (kind === 'gem') return GEM_VALUES[Math.min(MAX_SKILL, skills.gemSkill)] ?? 200;
+  if (kind === 'rock') return ROCK_VALUES[Math.min(2, skills.rockSkill)] ?? 10;
+  const factor = GOLD_FACTORS[Math.min(MAX_SKILL, skills.goldSkill)] ?? 1;
+  return Math.round(ITEM_STATS[kind].value * factor);
+}
+
+export function shopPrice(s: Pick<State, 'bought'>, id: ShopItemId): number {
+  const spec = SHOP_ITEMS.find((item) => item.id === id);
+  if (!spec) return Number.POSITIVE_INFINITY;
+  if (spec.kind === 'consumable') return spec.cost;
+  return spec.cost + PRICE_STEP * (s.bought[id] ?? 0);
+}
+
+/** Bildhauer erscheint erst im Shop nach dem, in dem der Steinmetz gekauft wurde */
+export function shopItemVisible(
+  s: Pick<State, 'upgrades' | 'shopPurchased'>,
+  id: ShopItemId,
+): boolean {
+  if (id !== 'sculptor') return true;
+  return s.upgrades.rockSkill >= 1 && !s.shopPurchased.includes('mason');
+}
+
+/** Ob das Item gerade grundsätzlich kaufbar ist (ohne Geldprüfung) */
+export function canBuy(s: Pick<State, 'effects' | 'upgrades' | 'shopPurchased'>, id: ShopItemId) {
+  if (s.shopPurchased.includes(id)) return false;
+  if (id === 'winch' || id === 'clock') return s.effects[id] === 0;
+  if (id === 'gemSkill' || id === 'goldSkill' || id === 'luck') return s.upgrades[id] < MAX_SKILL;
+  if (id === 'mason') return s.upgrades.rockSkill === 0;
+  if (id === 'sculptor') return s.upgrades.rockSkill === 1 && shopItemVisible(s, id);
+  return true;
+}
+
+export function roundTime(effects: Effects): number {
+  return ROUND_TIME + (effects.clock > 0 ? EXTRA_TIME : 0);
 }
 
 export function hookPosition(s: Pick<State, 'angle' | 'ropeLength'>): { x: number; y: number } {
@@ -209,25 +337,35 @@ export function hookPosition(s: Pick<State, 'angle' | 'ropeLength'>): { x: numbe
   };
 }
 
-export function reelSpeedFor(s: Pick<State, 'grabbed' | 'upgrades' | 'tonicTimer'>): number {
+export function reelSpeedFor(s: Pick<State, 'grabbed' | 'effects' | 'tonicTimer'>): number {
   const base = s.grabbed ? ITEM_STATS[s.grabbed.kind].pullSpeed : EMPTY_REEL_SPEED;
-  const winchMul = 1 + s.upgrades.winch * 0.35;
+  const winchMul = s.effects.winch > 0 ? 1 + WINCH_BONUS : 1;
   const tonicMul = s.tonicTimer > 0 ? 1.8 : 1;
   return base * winchMul * tonicMul;
 }
 
-export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldItem[] {
+const NO_SKILLS = { gemSkill: 0, goldSkill: 0, rockSkill: 0 };
+
+export function spawnItems(
+  round: number,
+  luckLevel: number,
+  rng: Rng,
+  skills: Pick<Upgrades, 'gemSkill' | 'goldSkill' | 'rockSkill'> = NO_SKILLS,
+): FieldItem[] {
   const r = Math.max(1, round);
   const kinds: ItemKind[] = [];
 
+  const tinyGoldCount = 4;
   const smallGoldCount = 5;
-  const largeGoldCount = 3 + Math.min(3, Math.floor((r - 1) / 2)) + Math.min(2, luckLevel);
-  const gemCount = Math.min(4, Math.floor(r / 2) + 1 + luckLevel);
+  const largeGoldCount = 3 + Math.min(3, Math.floor((r - 1) / 2)) + Math.min(MAX_SKILL, luckLevel);
+  // Später deutlich mehr Edelsteine (Runde 1: 1, Runde 5: 3, Runde 9: 5, max. 8)
+  const gemCount = Math.min(8, 1 + Math.floor((r - 1) / 2) + luckLevel);
   const rockCount = Math.min(8, 3 + r);
 
   for (let i = 0; i < largeGoldCount; i++) kinds.push('gold_large');
   for (let i = 0; i < gemCount; i++) kinds.push('gem');
   for (let i = 0; i < smallGoldCount; i++) kinds.push('gold_small');
+  for (let i = 0; i < tinyGoldCount; i++) kinds.push('gold_tiny');
   for (let i = 0; i < rockCount; i++) kinds.push('rock');
 
   const items: FieldItem[] = [];
@@ -236,6 +374,7 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
 
   for (const kind of kinds) {
     const spec = ITEM_STATS[kind];
+    const value = itemValue(kind, skills);
     const variant = (nextId - 1 + variantOffset) % NUGGET_SHAPES.length;
     const marginX = spec.radius + 16;
     const minY =
@@ -263,7 +402,7 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
           x,
           y,
           radius: spec.radius,
-          value: spec.value,
+          value,
           weight: spec.weight,
           variant,
         });
@@ -278,7 +417,7 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
         x: rng.int(marginX, WIDTH - marginX),
         y: rng.int(GROUND_Y + 42, maxY),
         radius: spec.radius,
-        value: spec.value,
+        value,
         weight: spec.weight,
         variant,
       });
@@ -293,6 +432,7 @@ export function createState(rng: Rng): State {
     phase: 'playing',
     round: 1,
     target: roundTarget(1),
+    paidTax: 0,
     money: 0,
     score: 0,
     timeLeft: ROUND_TIME,
@@ -302,7 +442,9 @@ export function createState(rng: Rng): State {
     hookPhase: 'swinging',
     grabbed: null,
     items: spawnItems(1, 0, rng),
-    upgrades: { winch: 0, luck: 0 },
+    upgrades: { luck: 0, gemSkill: 0, goldSkill: 0, rockSkill: 0 },
+    effects: { winch: 0, clock: 0 },
+    bought: {},
     consumables: { dynamite: 0, tonic: 0 },
     tonicTimer: 0,
     shopPurchased: [],
@@ -336,23 +478,25 @@ export function activateConsumable(s: State, kind: 'dynamite' | 'tonic'): State 
 }
 
 export function buyShopItem(s: State, id: ShopItemId): State {
-  if (s.phase !== 'shop') return s;
-  if (s.shopPurchased.includes(id)) return s;
-  const spec = SHOP_ITEMS.find((item) => item.id === id);
-  if (!spec || s.money < spec.cost) return s;
+  if (s.phase !== 'shop' || !canBuy(s, id)) return s;
+  const price = shopPrice(s, id);
+  if (s.money < price) return s;
 
   const upgrades = { ...s.upgrades };
+  const effects = { ...s.effects };
   const consumables = { ...s.consumables };
-  if (id === 'winch') upgrades.winch += 1;
-  else if (id === 'luck') upgrades.luck += 1;
-  else if (id === 'dynamite') consumables.dynamite += 1;
-  else if (id === 'tonic') consumables.tonic += 1;
+  if (id === 'winch' || id === 'clock') effects[id] = EFFECT_ROUNDS;
+  else if (id === 'gemSkill' || id === 'goldSkill' || id === 'luck') upgrades[id] += 1;
+  else if (id === 'mason' || id === 'sculptor') upgrades.rockSkill += 1;
+  else consumables[id] += 1;
 
   return {
     ...s,
-    money: s.money - spec.cost,
+    money: s.money - price,
     upgrades,
+    effects,
     consumables,
+    bought: { ...s.bought, [id]: (s.bought[id] ?? 0) + 1 },
     shopPurchased: [...s.shopPurchased, id],
   };
 }
@@ -365,13 +509,13 @@ export function nextRound(s: State, rng: Rng): State {
     phase: 'playing',
     round,
     target: roundTarget(round),
-    timeLeft: ROUND_TIME,
+    timeLeft: roundTime(s.effects),
     angle: 0,
     swingDir: 1,
     ropeLength: MIN_ROPE,
     hookPhase: 'swinging',
     grabbed: null,
-    items: spawnItems(round, s.upgrades.luck, rng),
+    items: spawnItems(round, s.upgrades.luck, rng, s.upgrades),
     tonicTimer: 0,
     shopPurchased: [],
     lastCollected: null,
@@ -392,6 +536,7 @@ export function update(s: State, input: Input, dt: number): State {
 
   let { angle, swingDir, ropeLength, hookPhase, grabbed, items, money, score, lastCollected } =
     next;
+  let { effects, paidTax } = next;
 
   if (hookPhase === 'swinging') {
     angle += swingDir * SWING_SPEED * dt;
@@ -427,7 +572,7 @@ export function update(s: State, input: Input, dt: number): State {
       hookPhase = 'reeling';
     }
   } else if (hookPhase === 'reeling') {
-    const speed = reelSpeedFor({ grabbed, upgrades: next.upgrades, tonicTimer });
+    const speed = reelSpeedFor({ grabbed, effects, tonicTimer });
     ropeLength -= speed * dt;
     if (ropeLength <= MIN_ROPE) {
       ropeLength = MIN_ROPE;
@@ -447,6 +592,12 @@ export function update(s: State, input: Input, dt: number): State {
   if (timeLeft <= 0 || fieldCleared) {
     if (money >= next.target) {
       phase = 'shop';
+      paidTax = roundTax(next.round);
+      money -= paidTax;
+      effects = {
+        winch: Math.max(0, effects.winch - 1),
+        clock: Math.max(0, effects.clock - 1),
+      };
       hookPhase = 'swinging';
       ropeLength = MIN_ROPE;
       grabbed = null;
@@ -468,6 +619,8 @@ export function update(s: State, input: Input, dt: number): State {
     items,
     money,
     score,
+    effects,
+    paidTax,
     lastCollected,
   };
 }

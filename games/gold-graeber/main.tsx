@@ -12,21 +12,26 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activateConsumable,
   buyShopItem,
+  canBuy,
   createState,
   type FieldItem,
   GROUND_Y,
   HEIGHT,
   hookPosition,
   isOver,
+  MAX_SKILL,
   NUGGET_SHAPES,
   nextRound,
   ORIGIN_X,
   ORIGIN_Y,
   roundTarget,
+  roundTax,
   SHOP_ITEMS,
   type ShopItemId,
   type State,
   shootHook,
+  shopItemVisible,
+  shopPrice,
   update,
   WIDTH,
 } from './logic.ts';
@@ -267,7 +272,7 @@ export default function GoldGraeber({ api, paused }: GameProps) {
                 <span>Runde {s.round} geschafft!</span>
               </h2>
               <p className="t-small muted">
-                Nicht ausgegebenes Geld bleibt für Runde {s.round + 1} erhalten.
+                Abgabe von {s.paidTax} Gold bezahlt. Der Rest bleibt für Runde {s.round + 1}.
               </p>
             </div>
             <div className="gg-shop-stats">
@@ -280,29 +285,24 @@ export default function GoldGraeber({ api, paused }: GameProps) {
               <div>
                 <div className="t-label muted">NÄCHSTES ZIEL</div>
                 <div className="t-score">{roundTarget(s.round + 1)}</div>
+                <div className="t-small muted">Abgabe {roundTax(s.round + 1)}</div>
               </div>
             </div>
           </div>
 
           <div className="gg-shop-grid">
-            {SHOP_ITEMS.map((item) => {
-              const bought = s.shopPurchased.includes(item.id);
-              const affordable = s.money >= item.cost;
-              const ownedCount =
-                item.id === 'winch'
-                  ? `Stufe ${s.upgrades.winch}`
-                  : item.id === 'luck'
-                    ? `Stufe ${s.upgrades.luck}`
-                    : item.id === 'dynamite'
-                      ? `${s.consumables.dynamite}× im Vorrat`
-                      : `${s.consumables.tonic}× im Vorrat`;
+            {SHOP_ITEMS.filter((item) => shopItemVisible(s, item.id)).map((item) => {
+              const price = shopPrice(s, item.id);
+              const available = canBuy(s, item.id);
+              const affordable = s.money >= price;
+              const status = shopStatus(s, item.id);
 
               return (
                 <div key={item.id} className="gg-shop-card">
                   <div>
                     <div className="gg-shop-card-top">
                       <span className="t-body-strong">{item.name}</span>
-                      <span className="chip t-mono-small">{item.cost} Gold</span>
+                      <span className="chip t-mono-small">{price} Gold</span>
                     </div>
                     <p className="t-small muted" style={{ marginTop: 4 }}>
                       {item.description}
@@ -316,14 +316,14 @@ export default function GoldGraeber({ api, paused }: GameProps) {
                       gap: 8,
                     }}
                   >
-                    <span className="t-small muted">{ownedCount}</span>
+                    <span className="t-small muted">{status}</span>
                     <button
                       type="button"
                       className="btn"
-                      disabled={paused || bought || !affordable}
+                      disabled={paused || !available || !affordable}
                       onClick={() => handleBuy(item.id)}
                     >
-                      {bought ? 'Gekauft' : 'Kaufen'}
+                      {s.shopPurchased.includes(item.id) ? 'Gekauft' : 'Kaufen'}
                     </button>
                   </div>
                 </div>
@@ -348,6 +348,21 @@ export default function GoldGraeber({ api, paused }: GameProps) {
   );
 }
 
+function shopStatus(s: State, id: ShopItemId): string {
+  if (id === 'winch' || id === 'clock') {
+    const left = s.effects[id];
+    return left > 0 ? `noch ${left} ${left === 1 ? 'Runde' : 'Runden'}` : 'nicht aktiv';
+  }
+  if (id === 'gemSkill' || id === 'goldSkill' || id === 'luck') {
+    return `Stufe ${s.upgrades[id]} von ${MAX_SKILL}`;
+  }
+  if (id === 'mason') return s.upgrades.rockSkill >= 1 ? 'gelernt' : 'noch nicht gelernt';
+  if (id === 'sculptor') {
+    if (s.upgrades.rockSkill >= 2) return 'gelernt';
+    return 'noch nicht gelernt';
+  }
+  return `${s.consumables[id]}× im Vorrat`;
+}
 function draw(
   ctx: CanvasRenderingContext2D,
   s: State,
@@ -474,7 +489,7 @@ function draw(
 }
 
 function isGoldNugget(item: FieldItem): boolean {
-  return item.kind === 'gold_small' || item.kind === 'gold_large';
+  return item.kind === 'gold_tiny' || item.kind === 'gold_small' || item.kind === 'gold_large';
 }
 
 function GoldNuggetSvg({ item, x, y }: { item: FieldItem; x: number; y: number }) {

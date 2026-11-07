@@ -1,6 +1,6 @@
 {
   "title": "Gold-Gräber",
-  "description": "Lass deinen Greifhaken hinab, sammle Schätze ein und erreiche in 90 Sekunden den höchsten Punktestand.",
+  "description": "Lass deinen Greifhaken hinab, sammle Schätze ein und erreiche in 40 Sekunden pro Runde den höchsten Punktestand.",
   "category": "arcade",
   "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
   "controls": "Leertaste, Pfeil runter oder Aktionsbutton",

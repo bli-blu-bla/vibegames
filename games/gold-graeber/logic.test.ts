@@ -13,11 +13,17 @@ import {
   nextRound,
   ORIGIN_X,
   ORIGIN_Y,
+  PRICE_STEP,
   ROUND_TIME,
   reelSpeedFor,
   roundTarget,
+  roundTax,
+  roundTime,
   type State,
   shootHook,
+  shopItemVisible,
+  shopPrice,
+  spawnItems,
   update,
 } from './logic.ts';
 
@@ -35,7 +41,7 @@ function makeItem(kind: FieldItem['kind'], x = ORIGIN_X, y = ORIGIN_Y + 80, id =
 }
 
 describe('gold-graeber logic', () => {
-  it('startet Runde 1 mit 90 Sekunden, steigendem Ziel und zufälligen Gegenständen', () => {
+  it('startet Runde 1 mit 40 Sekunden, steigendem Ziel und zufälligen Gegenständen', () => {
     const s1 = createState(createRng('seed-a'));
     const s2 = createState(createRng('seed-b'));
 
@@ -133,7 +139,7 @@ describe('gold-graeber logic', () => {
     }
   });
 
-  it('öffnet nach 90 Sekunden den Shop bei erreichtem Ziel oder beendet das Spiel sonst', () => {
+  it('öffnet nach Ablauf der Zeit den Shop bei erreichtem Ziel oder beendet das Spiel sonst', () => {
     const base = createState(createRng('timer'));
     const wonRound = update(
       { ...base, money: base.target, score: base.target, timeLeft: 0.1 },
@@ -142,6 +148,7 @@ describe('gold-graeber logic', () => {
     );
     expect(wonRound.phase).toBe('shop');
     expect(isOver(wonRound)).toBe(false);
+    expect(wonRound.money).toBe(base.target - roundTax(1));
 
     const lostRound = update(
       { ...base, money: base.target - 10, score: base.target - 10, timeLeft: 0.1 },
@@ -150,6 +157,20 @@ describe('gold-graeber logic', () => {
     );
     expect(lostRound.phase).toBe('gameover');
     expect(isOver(lostRound)).toBe(true);
+  });
+
+  it('zieht am Rundenende die halbe Zielsumme als Abgabe ab', () => {
+    const base = createState(createRng('abgabe'));
+    const s = update(
+      { ...base, money: base.target + 120, score: base.target + 120, timeLeft: 0.1 },
+      {},
+      0.2,
+    );
+    expect(s.phase).toBe('shop');
+    expect(roundTax(1)).toBe(Math.floor(roundTarget(1) / 2));
+    expect(s.paidTax).toBe(roundTax(1));
+    expect(s.money).toBe(base.target + 120 - roundTax(1));
+    expect(s.score).toBe(base.target + 120);
   });
 
   it('ermöglicht Käufe im Shop, übernimmt Restgeld und aktiviert Verbrauchsitems in späteren Runden', () => {
@@ -167,7 +188,7 @@ describe('gold-graeber logic', () => {
     s = buyShopItem(s, 'dynamite');
     s = buyShopItem(s, 'tonic');
 
-    expect(s.upgrades.winch).toBe(1);
+    expect(s.effects.winch).toBe(3);
     expect(s.consumables.dynamite).toBe(1);
     expect(s.consumables.tonic).toBe(1);
     expect(s.money).toBe(300 - 100 - 60 - 80);
@@ -178,7 +199,6 @@ describe('gold-graeber logic', () => {
     expect(s.round).toBe(2);
     expect(s.target).toBe(roundTarget(2));
     expect(s.money).toBe(60);
-    expect(s.upgrades.winch).toBe(1);
     expect(reelSpeedFor({ ...s, grabbed: makeItem('gold_large') })).toBeGreaterThan(baseSpeed);
 
     // Krafttrank aktivieren
@@ -196,5 +216,95 @@ describe('gold-graeber logic', () => {
     s = activateConsumable(s, 'dynamite');
     expect(s.consumables.dynamite).toBe(0);
     expect(s.grabbed).toBeNull();
+  });
+
+  it('Seil und Uhr wirken drei Runden und sind erst danach wieder kaufbar', () => {
+    const rng = createRng('timed');
+    let s: State = { ...createState(rng), phase: 'shop', money: 2000 };
+    s = buyShopItem(s, 'winch');
+    s = buyShopItem(s, 'clock');
+    expect(s.effects).toEqual({ winch: 3, clock: 3 });
+
+    const noWinch = reelSpeedFor({
+      grabbed: makeItem('rock'),
+      effects: { winch: 0, clock: 0 },
+      tonicTimer: 0,
+    });
+    expect(reelSpeedFor({ ...s, grabbed: makeItem('rock') })).toBeCloseTo(noWinch * 1.2);
+
+    for (let i = 0; i < 3; i++) {
+      s = nextRound(s, rng);
+      expect(s.timeLeft).toBe(roundTime({ winch: 1, clock: 1 }));
+      s = update({ ...s, money: s.target, timeLeft: 0.01 }, {}, 0.02);
+      expect(s.phase).toBe('shop');
+      if (i < 2) expect(buyShopItem({ ...s, money: 5000 }, 'winch').effects.winch).toBe(2 - i);
+    }
+    expect(s.effects).toEqual({ winch: 0, clock: 0 });
+    s = nextRound(s, rng);
+    expect(s.timeLeft).toBe(ROUND_TIME);
+  });
+
+  it('macht Mehrrunden-Items mit jedem Kauf 50 Gold teurer, Verbrauchsitems nicht', () => {
+    let s: State = { ...createState(createRng('preis')), phase: 'shop', money: 5000 };
+    const first = shopPrice(s, 'gemSkill');
+    s = buyShopItem(s, 'gemSkill');
+    expect(shopPrice(s, 'gemSkill')).toBe(first + PRICE_STEP);
+    expect(s.money).toBe(5000 - first);
+
+    const dyn = shopPrice(s, 'dynamite');
+    s = buyShopItem(s, 'dynamite');
+    expect(shopPrice(s, 'dynamite')).toBe(dyn);
+  });
+
+  it('Skills haben drei Stufen und erhöhen den Wert von Edelsteinen und Gold', () => {
+    const rng = createRng('skills');
+    let s: State = { ...createState(rng), phase: 'shop', money: 10000 };
+    for (let i = 0; i < 4; i++) {
+      s = buyShopItem({ ...s, shopPurchased: [] }, 'gemSkill');
+      s = buyShopItem({ ...s, shopPurchased: [] }, 'goldSkill');
+    }
+    expect(s.upgrades.gemSkill).toBe(3);
+    expect(s.upgrades.goldSkill).toBe(3);
+
+    const plain = spawnItems(5, 0, createRng('feld'));
+    const skilled = spawnItems(5, 0, createRng('feld'), s.upgrades);
+    for (const kind of ['gem', 'gold_large', 'gold_small'] as const) {
+      const a = plain.find((i) => i.kind === kind)?.value ?? 0;
+      const b = skilled.find((i) => i.kind === kind)?.value ?? 0;
+      expect(b).toBeGreaterThan(a);
+    }
+  });
+
+  it('legt in späteren Runden mehr Edelsteine ins Feld', () => {
+    const gems = (round: number) =>
+      spawnItems(round, 0, createRng('gems')).filter((i) => i.kind === 'gem').length;
+    expect(gems(9)).toBeGreaterThan(gems(1));
+  });
+
+  it('legt kleine Goldkrümel mit 10 Gold ins Feld', () => {
+    const tiny = spawnItems(1, 0, createRng('krümel')).filter((i) => i.kind === 'gold_tiny');
+    expect(tiny.length).toBeGreaterThan(0);
+    expect(tiny.every((i) => i.value === 10)).toBe(true);
+  });
+
+  it('Steinmetz und eine Runde später Bildhauer erhöhen den Steinwert auf 20 und 30', () => {
+    let s: State = { ...createState(createRng('stein')), phase: 'shop', money: 1000 };
+    expect(buyShopItem(s, 'sculptor')).toBe(s);
+    expect(shopItemVisible(s, 'sculptor')).toBe(false);
+
+    s = buyShopItem(s, 'mason');
+    expect(shopItemVisible(s, 'sculptor')).toBe(false);
+    expect(buyShopItem(s, 'sculptor')).toBe(s);
+    // erst im nächsten Shop
+    s = { ...s, shopPurchased: [] };
+    expect(shopItemVisible(s, 'sculptor')).toBe(true);
+    const rock = (state: State) =>
+      spawnItems(3, 0, createRng('feld'), state.upgrades).find((i) => i.kind === 'rock')?.value;
+    expect(rock(s)).toBe(20);
+    expect(buyShopItem({ ...s, shopPurchased: [] }, 'mason').upgrades.rockSkill).toBe(1);
+
+    s = buyShopItem(s, 'sculptor');
+    expect(rock(s)).toBe(30);
+    expect(spawnItems(3, 0, createRng('feld')).find((i) => i.kind === 'rock')?.value).toBe(10);
   });
 });
