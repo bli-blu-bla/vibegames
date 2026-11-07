@@ -9,10 +9,34 @@ export const FLOOR = '.';
 export const WALL = '#';
 export const BOX = '+';
 
-export type Item = 'bomb' | 'fire' | 'speed';
+/** Extras: mehr Bomben, mehr Reichweite, schneller, Bomben treten, ein Treffer frei */
+export type Item = 'bomb' | 'fire' | 'speed' | 'kick' | 'shield';
 /** Zeichen in `loot` (unter Kisten versteckt, sichtbar sobald dort Boden ist) */
-const ITEM_CHARS: Record<Item, string> = { bomb: 'b', fire: 'f', speed: 's' };
-const CHAR_ITEMS: Record<string, Item> = { b: 'bomb', f: 'fire', s: 'speed' };
+const ITEM_CHARS: Record<Item, string> = {
+  bomb: 'b',
+  fire: 'f',
+  speed: 's',
+  kick: 'k',
+  shield: 'h',
+};
+const CHAR_ITEMS: Record<string, Item> = {
+  b: 'bomb',
+  f: 'fire',
+  s: 'speed',
+  k: 'kick',
+  h: 'shield',
+};
+/** Ziehung der Extras: Kick und Schild sind seltener */
+const ITEM_POOL: readonly Item[] = [
+  'bomb',
+  'bomb',
+  'fire',
+  'fire',
+  'speed',
+  'speed',
+  'kick',
+  'shield',
+];
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 const DELTA: Record<Dir, [number, number]> = {
@@ -46,6 +70,10 @@ export const LOOT_CHANCE = 0.3;
 /** So nah (in Feldern) müssen Monster und Spieler sein, damit es den Spieler erwischt */
 export const TOUCH = 0.6;
 export const CLEAR_PAUSE = 1.6;
+/** Felder pro Sekunde, die eine getretene Bombe rutscht */
+export const KICK_SPEED = 8;
+/** Sekunden unverwundbar, nachdem der Schild einen Treffer abgefangen hat */
+export const GUARD_TIME = 1.2;
 
 export const POINTS = { box: 10, mob: 100, stage: 500, kill: 100 } as const;
 
@@ -86,6 +114,12 @@ export interface Player extends Mover {
   bombs: number;
   range: number;
   kills: number;
+  /** Kann Bomben treten */
+  kick: boolean;
+  /** Fängt einen Treffer ab */
+  shield: boolean;
+  /** Sekunden, die der Spieler nach einem abgefangenen Treffer noch unverwundbar ist */
+  guard: number;
 }
 
 export type Mob = Mover;
@@ -96,6 +130,9 @@ export interface Bomb {
   fuse: number;
   range: number;
   owner: number;
+  /** Getreten: rutscht in diese Richtung, `t` ist der Weg zum nächsten Feld */
+  slide: Dir | null;
+  t: number;
 }
 
 export interface Flame {
@@ -106,7 +143,7 @@ export interface Flame {
   owner: number;
 }
 
-export type GameEvent = 'place' | 'boom' | 'pickup' | 'death' | 'mob' | 'clear';
+export type GameEvent = 'place' | 'boom' | 'pickup' | 'death' | 'mob' | 'clear' | 'kick' | 'shield';
 
 export type Mode = 'solo' | 'versus';
 
@@ -183,7 +220,6 @@ function nearSpawn(x: number, y: number, spawns: readonly [number, number][]) {
 function buildField(rng: Rng, spawns: readonly [number, number][]) {
   let tiles = '';
   let loot = '';
-  const items: Item[] = ['bomb', 'fire', 'speed'];
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       if (isPillar(x, y)) {
@@ -191,7 +227,7 @@ function buildField(rng: Rng, spawns: readonly [number, number][]) {
         loot += '.';
       } else if (!nearSpawn(x, y, spawns) && rng.next() < BOX_CHANCE) {
         tiles += BOX;
-        loot += rng.next() < LOOT_CHANCE ? ITEM_CHARS[rng.pick(items)] : '.';
+        loot += rng.next() < LOOT_CHANCE ? ITEM_CHARS[rng.pick(ITEM_POOL)] : '.';
       } else {
         tiles += FLOOR;
         loot += '.';
@@ -215,6 +251,9 @@ function spawnPlayer(seat: number, carry?: Player): Player {
     bombs: carry?.bombs ?? 1,
     range: carry?.range ?? 2,
     kills: carry?.kills ?? 0,
+    kick: carry?.kick ?? false,
+    shield: carry?.shield ?? false,
+    guard: 0,
   };
 }
 
@@ -525,6 +564,40 @@ function explode(s: State, first: Bomb): State {
 const onFlame = (flames: readonly Flame[], x: number, y: number) =>
   flames.find((f) => f.x === x && f.y === y);
 
+// ---------- Kick ----------
+
+/** Eine rutschende Bombe darf auf freien Boden ohne Bombe, Spieler oder Monster */
+function slideFree(s: State, bombs: readonly Bomb[], self: Bomb | null, x: number, y: number) {
+  if (tileAt(s, x, y) !== FLOOR) return false;
+  if (bombs.some((b) => b !== self && b.x === x && b.y === y)) return false;
+  const at = ([cx, cy]: [number, number]) => cx === x && cy === y;
+  return !s.players.some((p) => p.alive && at(cellOf(p))) && !s.mobs.some((m) => at(cellOf(m)));
+}
+
+/** Getretene Bomben weiterschieben; sie halten vor dem ersten Hindernis an */
+function slideBombs(s: State, dt: number): Bomb[] {
+  let bombs = s.bombs;
+  for (const b of s.bombs) {
+    if (!b.slide) continue;
+    const [dx, dy] = DELTA[b.slide];
+    let { x, y } = b;
+    let t = b.t + KICK_SPEED * dt;
+    let slide: Dir | null = b.slide;
+    while (t >= 1 && slide) {
+      x += dx;
+      y += dy;
+      t -= 1;
+      if (!slideFree(s, bombs, b, x + dx, y + dy)) {
+        slide = null;
+        t = 0;
+      }
+    }
+    const moved = { ...b, x, y, t, slide };
+    bombs = bombs.map((o) => (o === b ? moved : o));
+  }
+  return bombs;
+}
+
 // ---------- Update ----------
 
 /**
@@ -551,6 +624,17 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
     }
     const inp = inputs[p.seat] ?? NO_INPUT;
     let np = moveMover(p, inp.dir, dt, (x, y) => passable({ tiles: st.tiles, bombs }, x, y));
+    if (np.guard > 0) np = { ...np, guard: Math.max(0, np.guard - dt) };
+    // Kick: steht vor einer Bombe und drückt in ihre Richtung
+    if (np.kick && inp.dir && np.dir === null) {
+      const [dx, dy] = DELTA[inp.dir];
+      const target = bombs.find((b) => b.x === np.x + dx && b.y === np.y + dy && !b.slide);
+      if (target && slideFree(st, bombs, target, target.x + dx, target.y + dy)) {
+        const dir = inp.dir;
+        bombs = bombs.map((b) => (b === target ? { ...b, slide: dir, t: 0 } : b));
+        events.push('kick');
+      }
+    }
     const [cx, cy] = cellOf(np);
     const item = itemAt({ tiles: st.tiles, loot }, cx, cy);
     if (item) {
@@ -559,10 +643,15 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
       if (item === 'bomb') np = { ...np, bombs: Math.min(MAX_BOMBS, np.bombs + 1) };
       if (item === 'fire') np = { ...np, range: Math.min(MAX_RANGE, np.range + 1) };
       if (item === 'speed') np = { ...np, speed: Math.min(MAX_SPEED, np.speed + SPEED_STEP) };
+      if (item === 'kick') np = { ...np, kick: true };
+      if (item === 'shield') np = { ...np, shield: true };
     }
     const own = bombs.filter((b) => b.owner === p.seat).length;
     if (inp.bomb && own < np.bombs && !hasBomb(bombs, cx, cy)) {
-      bombs = [...bombs, { x: cx, y: cy, fuse: FUSE, range: np.range, owner: p.seat }];
+      bombs = [
+        ...bombs,
+        { x: cx, y: cy, fuse: FUSE, range: np.range, owner: p.seat, slide: null, t: 0 },
+      ];
       events.push('place');
     }
     players.push(np);
@@ -578,7 +667,8 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
     ),
   };
 
-  // Zündschnüre und Flammen
+  // Getretene Bomben rutschen, Zündschnüre und Flammen laufen ab
+  st = { ...st, bombs: slideBombs(st, dt) };
   st = {
     ...st,
     bombs: st.bombs.map((b) => ({ ...b, fuse: b.fuse - dt })),
@@ -588,16 +678,24 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
     st = explode(st, due);
   }
 
-  // Treffer: Flammen
+  // Treffer: Flammen. Ein Schild fängt einen Treffer ab und macht kurz unverwundbar.
   let score = st.score;
   const killers: number[] = [];
+  let shielded = false;
+  const hurt = (p: Player): Player => {
+    if (p.shield) {
+      shielded = true;
+      return { ...p, shield: false, guard: GUARD_TIME };
+    }
+    return { ...p, alive: false };
+  };
   const hitPlayers = st.players.map((p) => {
-    if (!p.alive) return p;
+    if (!p.alive || p.guard > 0) return p;
     const [x, y] = cellOf(p);
     const f = onFlame(st.flames, x, y);
     if (!f) return p;
-    if (f.owner !== p.seat) killers.push(f.owner);
-    return { ...p, alive: false };
+    if (f.owner !== p.seat && !p.shield) killers.push(f.owner);
+    return hurt(p);
   });
   const mobsLeft = st.mobs.filter((m) => {
     const [x, y] = cellOf(m);
@@ -611,14 +709,15 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
 
   // Treffer: Monster berühren Spieler
   let alivePlayers = hitPlayers.map((p) => {
-    if (!p.alive) return p;
+    if (!p.alive || p.guard > 0) return p;
     const [px, py] = posOf(p);
     const touched = mobsLeft.some((m) => {
       const [mx, my] = posOf(m);
       return Math.abs(mx - px) + Math.abs(my - py) < TOUCH;
     });
-    return touched ? { ...p, alive: false } : p;
+    return touched ? hurt(p) : p;
   });
+  if (shielded) st = { ...st, events: [...st.events, 'shield'] };
   if (st.mode === 'versus') {
     alivePlayers = alivePlayers.map((p) => ({
       ...p,
@@ -684,9 +783,15 @@ export function predict(s: State, dt: number): State {
   };
   return {
     ...s,
-    players: s.players.map((p) => (p.alive ? glide(p) : p)),
+    players: s.players.map((p) =>
+      p.alive ? { ...glide(p), guard: Math.max(0, p.guard - dt) } : p,
+    ),
     mobs: s.mobs.map(glide),
-    bombs: s.bombs.map((b) => ({ ...b, fuse: Math.max(0, b.fuse - dt) })),
+    bombs: s.bombs.map((b) => ({
+      ...b,
+      fuse: Math.max(0, b.fuse - dt),
+      t: b.slide ? Math.min(0.99, b.t + KICK_SPEED * dt) : b.t,
+    })),
     flames: s.flames.map((f) => ({ ...f, ttl: f.ttl - dt })).filter((f) => f.ttl > 0),
     events: [],
   };

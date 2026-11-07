@@ -12,7 +12,7 @@ import {
   useNet,
   usePressedKeys,
 } from '@core/sdk';
-import { Bomb } from '@phosphor-icons/react';
+import { Bomb, User, Users } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   applySnapshot,
@@ -23,6 +23,7 @@ import {
   type Dir,
   FUSE,
   type GameEvent,
+  type Item,
   itemAt,
   LEVELS,
   type Level,
@@ -69,6 +70,13 @@ const P2_KEYS: Record<string, Dir> = {
 };
 
 type Setup = 'solo' | 'local';
+
+const DELTAS: Record<Dir, [number, number]> = {
+  up: [0, -1],
+  down: [0, 1],
+  left: [-1, 0],
+  right: [1, 0],
+};
 
 export default function Zuendschnur({ api, paused }: GameProps) {
   const { net } = api;
@@ -220,6 +228,8 @@ export default function Zuendschnur({ api, paused }: GameProps) {
       else if (ev === 'mob') playSfx('coin');
       else if (ev === 'clear') playSfx('win');
       else if (ev === 'death') playSfx('lose');
+      else if (ev === 'kick') playSfx('jump');
+      else if (ev === 'shield') playSfx('hit');
     }
     if (net && !guest) outbox.current.push(...next.events);
     const prev = state.current;
@@ -285,6 +295,45 @@ export default function Zuendschnur({ api, paused }: GameProps) {
 
   return (
     <div className="zs-root">
+      {!net && (
+        <div className="zs-top" style={{ maxWidth: MAX_FIELD_WIDTH }}>
+          <fieldset className="zs-choice" aria-label="Spieler">
+            {(['solo', 'local'] as const).map((su) => {
+              const label = su === 'solo' ? 'Allein gegen Monster' : 'Zu zweit an einem Gerät';
+              return (
+                <button
+                  key={su}
+                  type="button"
+                  className={setup === su ? 'btn btn-icon btn-primary' : 'btn btn-icon'}
+                  aria-pressed={setup === su}
+                  aria-label={label}
+                  title={label}
+                  disabled={!canChoose}
+                  onClick={() => chooseSetup(su)}
+                >
+                  {su === 'solo' ? <User size={20} /> : <Users size={20} />}
+                </button>
+              );
+            })}
+          </fieldset>
+          {setup === 'solo' && (
+            <fieldset className="zs-choice" aria-label="Schwierigkeit">
+              {LEVELS.map((l, i) => (
+                <button
+                  key={l.name}
+                  type="button"
+                  className={level === i ? 'btn btn-primary' : 'btn'}
+                  aria-pressed={level === i}
+                  disabled={!canChoose}
+                  onClick={() => chooseLevel(i)}
+                >
+                  {l.name}
+                </button>
+              ))}
+            </fieldset>
+          )}
+        </div>
+      )}
       <div className="zs-field" ref={fieldRef}>
         <canvas
           {...canvas.props}
@@ -296,54 +345,18 @@ export default function Zuendschnur({ api, paused }: GameProps) {
       <p className="t-mono-small muted zs-hud" aria-live="polite">
         {hud}
       </p>
-      <div className="zs-bar">
-        {!net && (
-          <fieldset className="zs-choice">
-            <legend className="t-label muted">SPIELER</legend>
-            {(['solo', 'local'] as const).map((su) => (
-              <button
-                key={su}
-                type="button"
-                className={setup === su ? 'btn btn-primary' : 'btn'}
-                aria-pressed={setup === su}
-                disabled={!canChoose}
-                onClick={() => chooseSetup(su)}
-              >
-                {su === 'solo' ? 'Allein' : 'Zu zweit'}
-              </button>
-            ))}
-          </fieldset>
-        )}
-        {!net && setup === 'solo' && (
-          <fieldset className="zs-choice">
-            <legend className="t-label muted">SCHWIERIGKEIT</legend>
-            {LEVELS.map((l, i) => (
-              <button
-                key={l.name}
-                type="button"
-                className={level === i ? 'btn btn-primary' : 'btn'}
-                aria-pressed={level === i}
-                disabled={!canChoose}
-                onClick={() => chooseLevel(i)}
-              >
-                {l.name}
-              </button>
-            ))}
-          </fieldset>
-        )}
-        <button
-          type="button"
-          className="btn zs-bomb"
-          disabled={paused}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            bombPress.current[0] = true;
-            markStarted();
-          }}
-        >
-          <Bomb size={20} weight="bold" /> Bombe
-        </button>
-      </div>
+      <button
+        type="button"
+        className="btn zs-bomb"
+        disabled={paused}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          bombPress.current[0] = true;
+          markStarted();
+        }}
+      >
+        <Bomb size={20} weight="bold" /> Bombe
+      </button>
       {local2 && (
         <p className="t-small muted">
           Spieler 1: WASD und Leertaste · Spieler 2: Pfeiltasten und Enter
@@ -364,7 +377,8 @@ function scoreOf(s: State, seat: number, online: boolean, local2: boolean) {
 function hudText(s: State, seat: number, online: boolean) {
   if (s.mode === 'solo') {
     const p = s.players[0];
-    return `${s.level.name} · Stufe ${s.stage} · Monster ${s.mobs.length} · Bomben ${p?.bombs ?? 0} · Reichweite ${p?.range ?? 0}`;
+    const extras = `${p?.kick ? ' · Kick' : ''}${p?.shield ? ' · Schild' : ''}`;
+    return `${s.level.name} · Stufe ${s.stage} · Monster ${s.mobs.length} · Bomben ${p?.bombs ?? 0} · Reichweite ${p?.range ?? 0}${extras}`;
   }
   const alive = s.players.filter((p) => p.alive).length;
   const me = online ? ` · Du bist Spieler ${seat + 1}` : '';
@@ -434,19 +448,23 @@ function drawField(
 
   // Bomben: pulsieren schneller, je kürzer die Zündschnur
   for (const b of s.bombs) {
-    const cx = b.x * TILE + TILE / 2;
-    const cy = b.y * TILE + TILE / 2;
+    const [sx, sy] = b.slide ? DELTAS[b.slide] : [0, 0];
+    const cx = (b.x + sx * b.t) * TILE + TILE / 2;
+    const cy = (b.y + sy * b.t) * TILE + TILE / 2;
     const pulse = 1 + 0.08 * Math.sin((FUSE - b.fuse) * (8 + (FUSE - b.fuse) * 6));
+    // Schnur zuerst und bis tief in den Kreis, damit beim Pulsieren keine Lücke entsteht.
+    // Sie brennt ab: bei 0.45 liegt das Ende am Kreisrand, bei 1 ist sie voll.
+    const len = 0.45 + 0.55 * Math.max(0, b.fuse / FUSE);
+    ctx.strokeStyle = FLAME;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx + 2, cy - 3);
+    ctx.lineTo(cx + 2 + 6 * len, cy - 3 - 9 * len);
+    ctx.stroke();
     ctx.fillStyle = c.ink;
     ctx.beginPath();
     ctx.arc(cx, cy + 2, 10 * pulse, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = FLAME;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(cx + 4, cy - 7);
-    ctx.lineTo(cx + 8, cy - 12);
-    ctx.stroke();
   }
 
   // Monster: eckig mit Augen
@@ -481,9 +499,18 @@ function drawField(
 
 /** Kleine Figur: Kopf mit Augen in Blickrichtung, Körper mit Nummer, Arme und Beine im Schritt */
 function drawFigure(ctx: CanvasRenderingContext2D, p: Player, c: Colors) {
+  // Nach einem abgefangenen Treffer blinkt die Figur
+  if (p.guard > 0 && Math.floor(p.guard * 10) % 2 === 0) return;
   const [x, y] = posOf(p);
   const cx = x * TILE + TILE / 2;
   const cy = y * TILE + TILE / 2;
+  if (p.shield) {
+    ctx.strokeStyle = c[SEAT_COLORS[p.seat] ?? 'accent'];
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 1, 15, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   // Schrittphase aus der Strecke, damit die Beine im Takt der Bewegung laufen
   const swing = p.dir ? Math.sin((x + y) * Math.PI * 2) * 2.5 : 0;
   ctx.fillStyle = c[SEAT_COLORS[p.seat] ?? 'accent'];
@@ -537,13 +564,7 @@ function banner(ctx: CanvasRenderingContext2D, c: Colors, title: string, sub: st
   ctx.fillText(sub, WIDTH / 2, y + 52);
 }
 
-function drawItem(
-  ctx: CanvasRenderingContext2D,
-  item: 'bomb' | 'fire' | 'speed',
-  px: number,
-  py: number,
-  c: Colors,
-) {
+function drawItem(ctx: CanvasRenderingContext2D, item: Item, px: number, py: number, c: Colors) {
   ctx.strokeStyle = c['line-strong'];
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -565,6 +586,22 @@ function drawItem(
     ctx.lineTo(cx + 7, cy);
     ctx.moveTo(cx, cy - 7);
     ctx.lineTo(cx, cy + 7);
+    ctx.stroke();
+  } else if (item === 'kick') {
+    // Stiefel: Bomben treten
+    ctx.moveTo(cx - 3, cy - 8);
+    ctx.lineTo(cx - 3, cy + 5);
+    ctx.lineTo(cx + 7, cy + 5);
+    ctx.stroke();
+    ctx.fillRect(cx - 5, cy + 3, 13, 4);
+  } else if (item === 'shield') {
+    // Schild: fängt einen Treffer ab
+    ctx.lineWidth = 2.5;
+    ctx.moveTo(cx, cy - 8);
+    ctx.lineTo(cx + 7, cy - 5);
+    ctx.quadraticCurveTo(cx + 6, cy + 4, cx, cy + 8);
+    ctx.quadraticCurveTo(cx - 6, cy + 4, cx - 7, cy - 5);
+    ctx.closePath();
     ctx.stroke();
   } else {
     // Doppelpfeil: schneller

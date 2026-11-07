@@ -20,19 +20,17 @@
   text-align: center;
 }
 
-.zs-bar {
+.zs-top {
   width: 100%;
-  max-width: 624px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .zs-choice {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   border: 0;
@@ -40,10 +38,8 @@
   padding: 0;
 }
 
-.zs-choice legend {
-  float: left;
-  margin-right: var(--space-2);
-  line-height: 44px;
+.zs-choice .btn:not(.btn-icon) {
+  padding: 0 var(--space-3);
 }
 
 .zs-bomb {

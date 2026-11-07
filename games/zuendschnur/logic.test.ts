@@ -8,6 +8,7 @@ import {
   dangerMap,
   FLOOR,
   FUSE,
+  GUARD_TIME,
   isOver,
   LEVELS,
   type Level,
@@ -110,7 +111,10 @@ describe('Bewegung', () => {
 
   it('läuft nicht in Wände, Kisten oder Bomben', () => {
     const s = empty(createState(rng()));
-    const blocked = { ...s, bombs: [{ x: 2, y: 1, fuse: 9, range: 1, owner: 0 }] };
+    const blocked = {
+      ...s,
+      bombs: [{ x: 2, y: 1, fuse: 9, range: 1, owner: 0, slide: null, t: 0 }],
+    };
     expect(passable(blocked, 2, 1)).toBe(false);
     expect(passable(s, 0, 1)).toBe(false);
     const after = run(blocked, [{ dir: 'right', bomb: false }], 0.5);
@@ -157,8 +161,8 @@ describe('Bomben', () => {
       ...empty(createState(rng())),
       players: [],
       bombs: [
-        { x: 1, y: 3, fuse: 0.01, range: 2, owner: 0 },
-        { x: 1, y: 5, fuse: 9, range: 2, owner: 0 },
+        { x: 1, y: 3, fuse: 0.01, range: 2, owner: 0, slide: null, t: 0 },
+        { x: 1, y: 5, fuse: 9, range: 2, owner: 0, slide: null, t: 0 },
       ],
     };
     const st = update(s, [], 0.05, rng());
@@ -172,7 +176,7 @@ describe('Monster und Stufen', () => {
     const s: State = {
       ...base,
       mobs: [{ x: 5, y: 1, dir: null, t: 0, face: 'down' as const, speed: 0 }],
-      bombs: [{ x: 3, y: 1, fuse: 0.01, range: 2, owner: 0 }],
+      bombs: [{ x: 3, y: 1, fuse: 0.01, range: 2, owner: 0, slide: null, t: 0 }],
       players: base.players.map((p) => ({ ...p, x: 1, y: 3 })),
     };
     const st = update(s, [NO_INPUT], 0.05, rng());
@@ -213,7 +217,7 @@ describe('Duell', () => {
     const base = empty(createState(rng(), 'versus', 2));
     const s: State = {
       ...base,
-      bombs: [{ x: COLS - 2, y: ROWS - 4, fuse: 0.01, range: 3, owner: 0 }],
+      bombs: [{ x: COLS - 2, y: ROWS - 4, fuse: 0.01, range: 3, owner: 0, slide: null, t: 0 }],
     };
     const st = update(s, [NO_INPUT, NO_INPUT], 0.05, rng());
     expect(st.over).toBe(true);
@@ -226,7 +230,7 @@ describe('Duell', () => {
     const s: State = {
       ...base,
       players: base.players.map((p) => ({ ...p, x: 1, y: 3 })),
-      bombs: [{ x: 1, y: 4, fuse: 0.01, range: 1, owner: 0 }],
+      bombs: [{ x: 1, y: 4, fuse: 0.01, range: 1, owner: 0, slide: null, t: 0 }],
     };
     const st = update(s, [NO_INPUT, NO_INPUT], 0.05, rng());
     expect(st.over).toBe(true);
@@ -239,6 +243,87 @@ describe('Duell', () => {
     expect(a.over).toBe(false);
     const b = removePlayer(a, 1);
     expect(b).toMatchObject({ over: true, winner: 0 });
+  });
+});
+
+describe('Extras: Kick und Schild', () => {
+  const bomb = (x: number, y: number, fuse = 9) => ({
+    x,
+    y,
+    fuse,
+    range: 1,
+    owner: 0,
+    slide: null,
+    t: 0,
+  });
+
+  it('sammelt Kick und Schild ein', () => {
+    const s = empty(createState(rng()));
+    const loot = `${s.loot.slice(0, COLS + 2)}kh${s.loot.slice(COLS + 4)}`;
+    const st = run({ ...s, loot }, [{ dir: 'right', bomb: false }], 0.8);
+    expect(st.players[0]).toMatchObject({ kick: true, shield: true });
+  });
+
+  it('ohne Kick bleibt die Bombe liegen', () => {
+    const s = { ...empty(createState(rng())), bombs: [bomb(2, 1)] };
+    const st = run(s, [{ dir: 'right', bomb: false }], 1);
+    expect(st.bombs[0]).toMatchObject({ x: 2, y: 1, slide: null });
+  });
+
+  it('mit Kick rutscht die Bombe bis vor die Wand', () => {
+    const base = empty(createState(rng()));
+    const s = {
+      ...base,
+      players: base.players.map((p) => ({ ...p, kick: true })),
+      bombs: [bomb(2, 1)],
+    };
+    const st = run(s, [{ dir: 'right', bomb: false }], 1.5);
+    expect(st.bombs[0]).toMatchObject({ x: COLS - 2, y: 1, slide: null });
+    expect(st.players[0]?.alive).toBe(true);
+  });
+
+  it('eine getretene Bombe hält vor einem Monster', () => {
+    const base = empty(createState(rng()));
+    const s = {
+      ...base,
+      players: base.players.map((p) => ({ ...p, kick: true })),
+      mobs: [{ x: 6, y: 1, dir: null, t: 0, face: 'down' as const, speed: 0 }],
+      bombs: [bomb(2, 1)],
+    };
+    const st = run(s, [{ dir: 'right', bomb: false }], 1);
+    expect(st.bombs[0]).toMatchObject({ x: 5, y: 1, slide: null });
+  });
+
+  it('der Schild fängt eine Explosion ab und macht kurz unverwundbar', () => {
+    const base = empty(createState(rng()));
+    const s = {
+      ...base,
+      players: base.players.map((p) => ({ ...p, x: 1, y: 3, shield: true })),
+      bombs: [bomb(1, 4, 0.01)],
+    };
+    const hit = update(s, [NO_INPUT], 0.05, rng());
+    expect(hit.players[0]).toMatchObject({ alive: true, shield: false, guard: GUARD_TIME });
+    expect(hit.events).toContain('shield');
+    const later = run(hit, [NO_INPUT], 0.6);
+    expect(later.players[0]?.alive).toBe(true);
+  });
+
+  it('der Schild hilft einmal gegen ein Monster, danach nicht mehr', () => {
+    const base = empty(createState(rng()));
+    const s = {
+      ...base,
+      players: base.players.map((p) => ({ ...p, shield: true })),
+      mobs: [{ x: 1, y: 1, dir: null, t: 0, face: 'down' as const, speed: 0 }],
+    };
+    const hit = update(s, [NO_INPUT], 0.05, rng());
+    expect(hit.players[0]).toMatchObject({ alive: true, shield: false });
+    expect(run(hit, [NO_INPUT], GUARD_TIME + 0.2).players[0]?.alive).toBe(false);
+  });
+
+  it('Kick und Schild bleiben für die nächste Stufe', () => {
+    const s = createState(rng());
+    const strong = { ...s, players: s.players.map((p) => ({ ...p, kick: true, shield: true })) };
+    expect(nextStage(strong, rng()).players[0]).toMatchObject({ kick: true, shield: true });
   });
 });
 
@@ -297,8 +382,8 @@ describe('Monster-Verstand', () => {
     const s: State = {
       ...field(),
       bombs: [
-        { x: 3, y: 1, fuse: 0.5, range: 2, owner: 0 },
-        { x: 5, y: 1, fuse: 2, range: 1, owner: 0 },
+        { x: 3, y: 1, fuse: 0.5, range: 2, owner: 0, slide: null, t: 0 },
+        { x: 5, y: 1, fuse: 2, range: 1, owner: 0, slide: null, t: 0 },
       ],
     };
     const d = dangerMap(s);
@@ -313,13 +398,19 @@ describe('Monster-Verstand', () => {
   });
 
   it('läuft nicht in eine Bombe direkt vor ihm, sondern dreht um', () => {
-    const s: State = { ...field(), bombs: [{ x: 6, y: 1, fuse: 2, range: 1, owner: 0 }] };
+    const s: State = {
+      ...field(),
+      bombs: [{ x: 6, y: 1, fuse: 2, range: 1, owner: 0, slide: null, t: 0 }],
+    };
     const m = mob(5, 1, { dir: 'right', t: 0.4 });
     expect(mobWant(s, m, rng(), dangerMap(s))).toBe('left');
   });
 
   it('läuft nicht in Feld, das gleich explodiert', () => {
-    const s: State = { ...field(), bombs: [{ x: 9, y: 1, fuse: 2, range: 3, owner: 0 }] };
+    const s: State = {
+      ...field(),
+      bombs: [{ x: 9, y: 1, fuse: 2, range: 3, owner: 0, slide: null, t: 0 }],
+    };
     const m = mob(5, 1, { dir: 'right', t: 0.3 });
     expect(mobWant(s, m, rng(), dangerMap(s))).toBe('left');
   });
@@ -329,11 +420,15 @@ describe('Monster-Verstand', () => {
     let s: State = {
       ...base,
       mobs: [mob(3, 1)],
-      bombs: [{ x: 1, y: 1, fuse: FUSE, range: 3, owner: 0 }],
+      bombs: [{ x: 1, y: 1, fuse: FUSE, range: 3, owner: 0, slide: null, t: 0 }],
     };
     for (let t = 0; t < FUSE + 0.3; t += 0.05) s = update(s, [NO_INPUT], 0.05, rng());
     expect(s.mobs).toHaveLength(1);
-    const d = dangerMap({ ...s, bombs: [{ x: 1, y: 1, fuse: 1, range: 3, owner: 0 }], flames: [] });
+    const d = dangerMap({
+      ...s,
+      bombs: [{ x: 1, y: 1, fuse: 1, range: 3, owner: 0, slide: null, t: 0 }],
+      flames: [],
+    });
     const m = s.mobs[0] as (typeof s.mobs)[number];
     expect(d[m.y * COLS + m.x]).toBe(Number.POSITIVE_INFINITY);
   });
