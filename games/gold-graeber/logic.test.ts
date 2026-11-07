@@ -9,6 +9,7 @@ import {
   isOver,
   MAX_ANGLE,
   MIN_ROPE,
+  NUGGET_SHAPES,
   nextRound,
   ORIGIN_X,
   ORIGIN_Y,
@@ -113,8 +114,23 @@ describe('gold-graeber logic', () => {
 
     expect(emptySpeed).toBeGreaterThan(gemSpeed);
     expect(gemSpeed).toBeGreaterThan(smallGoldSpeed);
-    expect(smallGoldSpeed).toBeGreaterThan(largeGoldSpeed);
+    expect(smallGoldSpeed).toBeGreaterThan(largeGoldSpeed * 2);
+    expect(largeGoldSpeed).toBeLessThanOrEqual(55);
     expect(largeGoldSpeed).toBeGreaterThan(rockSpeed);
+  });
+
+  it('vergibt abwechslungsreiche SVG-Formvarianten an gespawnte Goldnuggets', () => {
+    const s = createState(createRng('nugget-variants'));
+    const goldItems = s.items.filter((i) => i.kind === 'gold_small' || i.kind === 'gold_large');
+    const variants = new Set(goldItems.map((i) => i.variant));
+
+    expect(NUGGET_SHAPES.length).toBeGreaterThanOrEqual(4);
+    expect(variants.size).toBeGreaterThanOrEqual(3);
+    for (const item of goldItems) {
+      expect(item.variant).toBeDefined();
+      expect(item.variant).toBeGreaterThanOrEqual(0);
+      expect(item.variant).toBeLessThan(NUGGET_SHAPES.length);
+    }
   });
 
   it('öffnet nach 90 Sekunden den Shop bei erreichtem Ziel oder beendet das Spiel sonst', () => {

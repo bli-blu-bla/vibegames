@@ -41,8 +41,8 @@ export const ITEM_STATS: Record<ItemKind, ItemSpec> = {
     label: 'Großes Gold',
     value: 100,
     radius: 22,
-    weight: 3.0,
-    pullSpeed: 72,
+    weight: 3.8,
+    pullSpeed: 54,
   },
   gem: {
     kind: 'gem',
@@ -62,6 +62,49 @@ export const ITEM_STATS: Record<ItemKind, ItemSpec> = {
   },
 };
 
+export interface NuggetShape {
+  outer: string;
+  crown: string;
+  bevel: string;
+  ridges: string;
+  glint: string;
+}
+
+export const NUGGET_SHAPES: readonly NuggetShape[] = [
+  {
+    outer: 'M -14 -10 L -5 -16 L 8 -15 L 18 -7 L 19 5 L 11 15 L -6 16 L -18 8 L -19 -2 Z',
+    crown: 'M -14 -10 L -5 -16 L 8 -15 L 10 -6 L -8 -5 L -19 -2 Z',
+    bevel: 'M 10 -6 L 18 -7 L 19 5 L 11 15 L -6 16 L -8 6 L 9 5 Z',
+    ridges:
+      'M -19 -2 L -8 -5 L 10 -6 L 18 -7 M -5 -16 L -8 -5 L -8 6 L -6 16 M 10 -6 L 9 5 L 11 15 M -8 6 L 9 5',
+    glint: 'M -11 -9 L -4 -13 L 2 -12 L -5 -8 Z',
+  },
+  {
+    outer: 'M -17 -6 L -9 -16 L 0 -11 L 10 -16 L 19 -6 L 16 9 L 5 16 L -10 15 L -19 5 Z',
+    crown: 'M -17 -6 L -9 -16 L 0 -11 L 10 -16 L 19 -6 L 9 -4 L -9 -4 Z',
+    bevel: 'M 9 -4 L 19 -6 L 16 9 L 5 16 L -10 15 L -9 6 L 8 6 Z',
+    ridges:
+      'M -17 -6 L -9 -4 L 9 -4 L 19 -6 M 0 -11 L 0 -4 M -9 -4 L -9 6 L -10 15 M 9 -4 L 8 6 L 5 16 M -9 6 L 8 6',
+    glint: 'M -12 -7 L -8 -13 L -3 -9 L -8 -6 Z',
+  },
+  {
+    outer: 'M -12 -15 L 4 -17 L 17 -10 L 19 3 L 12 14 L -3 17 L -16 11 L -19 -3 Z',
+    crown: 'M -12 -15 L 4 -17 L 17 -10 L 8 -4 L -9 -5 L -19 -3 Z',
+    bevel: 'M 8 -4 L 17 -10 L 19 3 L 12 14 L -3 17 L -7 6 L 9 5 Z',
+    ridges:
+      'M -19 -3 L -9 -5 L 8 -4 L 17 -10 M 4 -17 L 8 -4 L 9 5 L 12 14 M -9 -5 L -7 6 L -3 17 M -7 6 L 9 5',
+    glint: 'M -9 -12 L 2 -14 L 5 -9 L -6 -8 Z',
+  },
+  {
+    outer: 'M -16 -9 L -6 -15 L 3 -13 L 14 -14 L 19 -3 L 15 11 L 2 16 L -12 14 L -19 3 Z',
+    crown: 'M -16 -9 L -6 -15 L 3 -13 L 14 -14 L 10 -5 L -8 -5 L -19 3 Z',
+    bevel: 'M 10 -5 L 19 -3 L 15 11 L 2 16 L -12 14 L -8 6 L 8 6 Z',
+    ridges:
+      'M -19 3 L -8 -5 L 10 -5 L 19 -3 M -6 -15 L -8 -5 L -8 6 L -12 14 M 10 -5 L 8 6 L 2 16 M -8 6 L 8 6',
+    glint: 'M -12 -8 L -5 -12 L 1 -10 L -6 -7 Z',
+  },
+];
+
 export interface FieldItem {
   id: number;
   kind: ItemKind;
@@ -70,6 +113,7 @@ export interface FieldItem {
   radius: number;
   value: number;
   weight: number;
+  variant?: number;
 }
 
 export type ShopItemId = 'winch' | 'luck' | 'dynamite' | 'tonic';
@@ -188,9 +232,11 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
 
   const items: FieldItem[] = [];
   let nextId = 1;
+  const variantOffset = rng.int(0, NUGGET_SHAPES.length - 1);
 
   for (const kind of kinds) {
     const spec = ITEM_STATS[kind];
+    const variant = (nextId - 1 + variantOffset) % NUGGET_SHAPES.length;
     const marginX = spec.radius + 16;
     const minY =
       kind === 'gem'
@@ -219,6 +265,7 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
           radius: spec.radius,
           value: spec.value,
           weight: spec.weight,
+          variant,
         });
         placed = true;
         break;
@@ -233,6 +280,7 @@ export function spawnItems(round: number, luckLevel: number, rng: Rng): FieldIte
         radius: spec.radius,
         value: spec.value,
         weight: spec.weight,
+        variant,
       });
     }
   }
