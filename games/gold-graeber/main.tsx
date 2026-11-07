@@ -18,6 +18,7 @@ import {
   HEIGHT,
   hookPosition,
   isOver,
+  NUGGET_SHAPES,
   nextRound,
   ORIGIN_X,
   ORIGIN_Y,
@@ -45,6 +46,7 @@ export default function GoldGraeber({ api, paused }: GameProps) {
   const stateRef = useRef<State>(createState(rng));
   const [uiState, setUiState] = useState<State>(stateRef.current);
   const popupsRef = useRef<FloatingPopup[]>([]);
+  const grabbedNuggetRef = useRef<SVGGElement>(null);
   const gameOverCalled = useRef(false);
 
   const colors = useColors();
@@ -154,7 +156,13 @@ export default function GoldGraeber({ api, paused }: GameProps) {
       .map((p) => ({ ...p, y: p.y - 22 * dt, life: p.life - dt }))
       .filter((p) => p.life > 0);
 
-    canvas.draw((ctx) => draw(ctx, stateRef.current, popupsRef.current, colors));
+    const cur = stateRef.current;
+    if (grabbedNuggetRef.current && cur.grabbed && isGoldNugget(cur.grabbed)) {
+      const tip = hookPosition(cur);
+      grabbedNuggetRef.current.setAttribute('transform', `translate(${tip.x}, ${tip.y})`);
+    }
+
+    canvas.draw((ctx) => draw(ctx, cur, popupsRef.current, colors));
   }, !paused);
 
   useEffect(() => {
@@ -168,18 +176,46 @@ export default function GoldGraeber({ api, paused }: GameProps) {
     s.grabbed !== null &&
     s.consumables.dynamite > 0;
   const canTonic = s.phase === 'playing' && s.consumables.tonic > 0 && s.tonicTimer <= 0;
+  const goldItems = s.items.filter(isGoldNugget);
+  const grabbedGold = s.grabbed && isGoldNugget(s.grabbed) ? s.grabbed : null;
+  const grabbedTip = hookPosition(s);
 
   return (
     <div className="gg-root">
-      <div className="gg-stage">
+      <div className="gg-stage" hidden={s.phase === 'shop'}>
         <canvas
           {...canvas.props}
+          style={{ ...canvas.props.style, maxWidth: '100%' }}
           onPointerDown={() => {
             if (stateRef.current.phase === 'playing') triggerShoot();
           }}
           role="img"
           aria-label={`Spielfeld Runde ${s.round}: ${s.money} von ${s.target} Gold, noch ${Math.ceil(s.timeLeft)} Sekunden`}
         />
+        <svg className="gg-nuggets-svg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true">
+          {goldItems.map((item) => (
+            <GoldNuggetSvg key={item.id} item={item} x={item.x} y={item.y} />
+          ))}
+          {grabbedGold && (
+            <g ref={grabbedNuggetRef} transform={`translate(${grabbedTip.x}, ${grabbedTip.y})`}>
+              <GoldNuggetSvg
+                item={grabbedGold}
+                x={Math.sin(s.angle) * (grabbedGold.radius + 4)}
+                y={Math.cos(s.angle) * (grabbedGold.radius + 4)}
+              />
+              <g transform={`rotate(${(-s.angle * 180) / Math.PI})`}>
+                <path
+                  d="M 0 -2 L -9 8 L -5 14 M 0 -2 L 9 8 L 5 14"
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </g>
+            </g>
+          )}
+        </svg>
       </div>
 
       {s.phase === 'playing' && (
@@ -437,6 +473,62 @@ function draw(
   }
 }
 
+function isGoldNugget(item: FieldItem): boolean {
+  return item.kind === 'gold_small' || item.kind === 'gold_large';
+}
+
+function GoldNuggetSvg({ item, x, y }: { item: FieldItem; x: number; y: number }) {
+  const shape = NUGGET_SHAPES[(item.variant ?? 0) % NUGGET_SHAPES.length] ?? NUGGET_SHAPES[0];
+  if (!shape) return null;
+  const isLarge = item.kind === 'gold_large';
+  const scale = item.radius / 18;
+  const strokeW = isLarge ? 1.65 : 2.3;
+  const ridgeW = isLarge ? 1.25 : 1.7;
+
+  return (
+    <g className="gg-nugget" transform={`translate(${x}, ${y})`}>
+      <g transform={`scale(${scale})`}>
+        <path
+          d={shape.outer}
+          fill="var(--highlight)"
+          stroke="var(--ink)"
+          strokeWidth={strokeW}
+          strokeLinejoin="round"
+        />
+        <path d={shape.crown} fill="var(--game-sand)" />
+        <path d={shape.bevel} fill="var(--highlight)" />
+        <path d={shape.glint} fill="var(--surface-200)" />
+        <path
+          d={shape.ridges}
+          fill="none"
+          stroke="var(--ink)"
+          strokeWidth={ridgeW}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d={shape.outer}
+          fill="none"
+          stroke="var(--ink)"
+          strokeWidth={strokeW}
+          strokeLinejoin="round"
+        />
+      </g>
+      <text
+        x={0}
+        y={isLarge ? 4.5 : 3.5}
+        textAnchor="middle"
+        className="gg-nugget-label"
+        fontSize={isLarge ? 11.5 : 9.5}
+        fontWeight={700}
+        fill="var(--surface-100)"
+      >
+        {item.value}
+      </text>
+    </g>
+  );
+}
+
 function drawItem(
   ctx: CanvasRenderingContext2D,
   item: FieldItem,
@@ -444,24 +536,12 @@ function drawItem(
   y: number,
   c: ReturnType<typeof useColors>,
 ) {
+  if (isGoldNugget(item)) return;
   const r = item.radius;
   ctx.save();
   ctx.translate(x, y);
 
-  if (item.kind === 'gold_small' || item.kind === 'gold_large') {
-    ctx.fillStyle = c.highlight;
-    ctx.strokeStyle = c.ink;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(-r, -r * 0.82, r * 2, r * 1.64, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = c['surface-100'];
-    ctx.font = `700 ${item.kind === 'gold_large' ? 12 : 10}px ${MONO}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(String(item.value), 0, 4);
-  } else if (item.kind === 'gem') {
+  if (item.kind === 'gem') {
     ctx.fillStyle = c['game-sky'];
     ctx.strokeStyle = c.ink;
     ctx.lineWidth = 2;
