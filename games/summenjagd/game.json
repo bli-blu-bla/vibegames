@@ -1,0 +1,8 @@
+{
+  "title": "Summenjagd",
+  "description": "Wähle Felder, die zusammen die gesuchte Summe ergeben. Je schneller, desto mehr Bonus.",
+  "category": "denken",
+  "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
+  "controls": "Felder anklicken oder antippen, erneutes Antippen nimmt die Wahl zurück",
+  "credits": []
+}
