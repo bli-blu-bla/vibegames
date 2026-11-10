@@ -47,6 +47,8 @@ const DELTA: Record<Dir, [number, number]> = {
 };
 const DIRS: readonly Dir[] = ['up', 'down', 'left', 'right'];
 const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+/** Wo etwas von einem Monster aus gesehen liegt */
+export type Side = 'front' | 'side' | 'back';
 
 // ---------- Regeln ----------
 
@@ -86,11 +88,37 @@ export interface Level {
   factor: number;
   /** Wie oft ein Monster an einer Kreuzung den Spieler jagt statt umherzustreifen (0 bis 1) */
   chase: number;
+  /**
+   * Sekunden, bis ein Monster eine neue Bombe bemerkt: vor sich am schnellsten, links und rechts
+   * langsamer, hinter sich am langsamsten. So lohnt es sich, Monster zu flankieren.
+   */
+  react: Record<Side, number>;
 }
 export const LEVELS: readonly Level[] = [
-  { name: 'Leicht', mobs: 2, mobSpeed: 1.6, factor: 1, chase: 0.15 },
-  { name: 'Mittel', mobs: 3, mobSpeed: 2.2, factor: 2, chase: 0.35 },
-  { name: 'Schwer', mobs: 4, mobSpeed: 2.9, factor: 3, chase: 0.6 },
+  {
+    name: 'Leicht',
+    mobs: 2,
+    mobSpeed: 1.6,
+    factor: 1,
+    chase: 0.15,
+    react: { front: 0.35, side: 0.6, back: 0.9 },
+  },
+  {
+    name: 'Mittel',
+    mobs: 3,
+    mobSpeed: 2.2,
+    factor: 2,
+    chase: 0.35,
+    react: { front: 0.2, side: 0.4, back: 0.6 },
+  },
+  {
+    name: 'Schwer',
+    mobs: 4,
+    mobSpeed: 2.9,
+    factor: 3,
+    chase: 0.6,
+    react: { front: 0.1, side: 0.25, back: 0.4 },
+  },
 ];
 export const DEFAULT_LEVEL = 1;
 export const MAX_MOBS = 10;
@@ -433,6 +461,31 @@ export function dangerMap(s: Pick<State, 'tiles' | 'bombs' | 'flames'>): number[
   return danger;
 }
 
+/** Liegt (x, y) vor, neben oder hinter dem Monster? Das eigene Feld zählt als vorne. */
+export function sideOf(m: Mob, x: number, y: number): Side {
+  const [mx, my] = cellOf(m);
+  const [fx, fy] = DELTA[m.face];
+  const ahead = (x - mx) * fx + (y - my) * fy;
+  const across = Math.abs((x - mx) * fy - (y - my) * fx);
+  if (ahead >= across) return 'front';
+  if (-ahead >= across) return 'back';
+  return 'side';
+}
+
+/** Hat das Monster die Bombe schon bemerkt? Das hängt von ihrem Alter und der Blickrichtung ab. */
+export function noticed(level: Level, m: Mob, b: Bomb): boolean {
+  return FUSE - b.fuse >= level.react[sideOf(m, b.x, b.y)];
+}
+
+/**
+ * Gefahrenkarte aus Sicht eines Monsters: nur Bomben, die es schon bemerkt hat. Flammen sieht es
+ * immer. `full` ist die Karte mit allen Bomben, sie wird genutzt, wenn es alle kennt.
+ */
+export function mobDanger(s: State, m: Mob, full: number[]): number[] {
+  const known = s.bombs.filter((b) => noticed(s.level, m, b));
+  return known.length === s.bombs.length ? full : dangerMap({ ...s, bombs: known });
+}
+
 /** Monster dürfen auf Boden ohne Bombe und ohne Flamme */
 const mobCanEnter = (s: State, danger: readonly number[], x: number, y: number) =>
   passable(s, x, y) && (danger[idx(x, y)] ?? 0) > 0;
@@ -660,13 +713,20 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
   }
   st = { ...st, players, loot, bombs, events };
 
-  // Monster bewegen (sie kennen die gerade gelegten Bomben schon)
-  const danger = dangerMap(st);
+  // Monster bewegen. Neue Bomben bemerken sie erst nach ihrer Reaktionszeit, Flammen sofort.
+  const full = dangerMap(st);
   st = {
     ...st,
-    mobs: st.mobs.map((m) =>
-      moveMover(m, mobWant(st, m, rng, danger), dt, (x, y) => mobCanEnter(st, danger, x, y), true),
-    ),
+    mobs: st.mobs.map((m) => {
+      const danger = mobDanger(st, m, full);
+      return moveMover(
+        m,
+        mobWant(st, m, rng, danger),
+        dt,
+        (x, y) => mobCanEnter(st, danger, x, y),
+        true,
+      );
+    }),
   };
 
   // Getretene Bomben rutschen, Zündschnüre und Flammen laufen ab

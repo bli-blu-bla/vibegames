@@ -46,6 +46,7 @@ import {
   WALL,
 } from './logic.ts';
 import { FLAME } from './palette.ts';
+import { SOUNDS } from './sounds.ts';
 import './style.css';
 
 type Colors = Record<ColorToken, string>;
@@ -123,6 +124,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   const seq = useRef(0);
   const frames = useRef<Frame[]>([]);
   const reported = useRef(false);
+  const looks = useRef<Look[]>([]);
 
   const colors = useColors();
   const canvas = useCanvas(WIDTH * SCALE, HEIGHT * SCALE);
@@ -236,16 +238,8 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   // ---------- Ablauf ----------
 
   const apply = (next: State) => {
-    for (const ev of next.events) {
-      if (ev === 'boom') playSfx('hit');
-      else if (ev === 'pickup') playSfx('coin');
-      else if (ev === 'place') playSfx('click');
-      else if (ev === 'mob') playSfx('coin');
-      else if (ev === 'clear') playSfx('win');
-      else if (ev === 'death') playSfx('lose');
-      else if (ev === 'kick') playSfx('jump');
-      else if (ev === 'shield') playSfx('hit');
-    }
+    // Jeder Effekt höchstens einmal pro Bild, sonst dröhnt eine Kettenreaktion
+    for (const ev of new Set(next.events)) playSfx(SOUNDS[ev]);
     if (net && !guest) outbox.current.push(...next.events);
     const prev = state.current;
     state.current = { ...next, events: [] };
@@ -301,7 +295,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
     }
     canvas.draw((ctx) => {
       ctx.scale(SCALE, SCALE);
-      drawField(ctx, state.current, colors, startedRef.current, local2);
+      drawField(ctx, state.current, colors, startedRef.current, local2, looks.current, dt);
     });
   }, !paused);
 
@@ -310,7 +304,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   useEffect(() => {
     canvas.draw((ctx) => {
       ctx.scale(SCALE, SCALE);
-      drawField(ctx, state.current, colors, startedRef.current, local2);
+      drawField(ctx, state.current, colors, startedRef.current, local2, looks.current, 1);
     });
   }, [colors, canvas, started, hud, setup, local2]);
 
@@ -429,6 +423,8 @@ function drawField(
   c: Colors,
   started: boolean,
   local2: boolean,
+  looks: Look[],
+  dt: number,
 ) {
   // Wände, Kisten, Extras
   for (let y = 0; y < ROWS; y++) {
@@ -489,19 +485,28 @@ function drawField(
     ctx.fill();
   }
 
-  // Monster: eckig mit Augen
-  for (const m of s.mobs) {
+  // Monster: eckig mit Augen, die Pupillen gleiten in die Blickrichtung
+  looks.length = s.mobs.length;
+  s.mobs.forEach((m, i) => {
     const [mx, my] = posOf(m);
     const px = mx * TILE;
     const py = my * TILE;
+    const [lx, ly] = glance(looks, i, m.face, dt);
     ctx.fillStyle = c['game-rose'];
     ctx.beginPath();
     ctx.roundRect(px + 5, py + 6, TILE - 10, TILE - 10, 4);
     ctx.fill();
-    ctx.fillStyle = c['surface-100'];
-    ctx.fillRect(px + 10, py + 12, 4, 5);
-    ctx.fillRect(px + TILE - 14, py + 12, 4, 5);
-  }
+    // Augen rücken leicht mit, Pupillen stärker, damit die Richtung gut zu lesen ist
+    const ex = px + TILE / 2 + lx * 1.5;
+    const ey = py + 15 + ly * 1.5;
+    for (const side of [-1, 1]) {
+      const cx = ex + side * 5;
+      ctx.fillStyle = c.ink;
+      ctx.fillRect(cx - 3.5, ey - 3.5, 7, 7);
+      ctx.fillStyle = c['surface-100'];
+      ctx.fillRect(cx - 1.5 + lx * 2, ey - 1.5 + ly * 2, 3, 3);
+    }
+  });
 
   // Spieler: kleine Figur mit Nummer auf dem Bauch
   for (const p of s.players) {
@@ -517,6 +522,19 @@ function drawField(
       local2 ? 'Leertaste / Enter legt Bomben' : 'Leertaste legt Bomben',
     );
   else if (s.clearIn !== null) banner(ctx, c, `Stufe ${s.stage + 1}`, 'Alle Monster erwischt');
+}
+
+/** Blickrichtung pro Monster (x, y), gleitet in etwa 0,1 s zur neuen Richtung */
+type Look = [number, number];
+const LOOK_SPEED = 12;
+
+function glance(looks: Look[], i: number, face: Dir, dt: number): Look {
+  const [tx, ty] = DELTAS[face];
+  const prev = looks[i];
+  const k = Math.min(1, dt * LOOK_SPEED);
+  const next: Look = prev ? [prev[0] + (tx - prev[0]) * k, prev[1] + (ty - prev[1]) * k] : [tx, ty];
+  looks[i] = next;
+  return next;
 }
 
 /** Kleine Figur: Kopf mit Augen in Blickrichtung, Körper mit Nummer, Arme und Beine im Schritt */

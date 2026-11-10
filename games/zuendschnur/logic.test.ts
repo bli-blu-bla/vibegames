@@ -14,11 +14,13 @@ import {
   LEVELS,
   type Level,
   mobCount,
+  mobDanger,
   mobSpeed,
   mobWant,
   moveMover,
   NO_INPUT,
   nextStage,
+  noticed,
   type PlayerInput,
   POINTS,
   parseInput,
@@ -30,6 +32,7 @@ import {
   removePlayer,
   SPAWNS,
   type State,
+  sideOf,
   tileAt,
   toSnapshot,
   update,
@@ -488,6 +491,55 @@ describe('Monster-Verstand', () => {
   it('Schwer jagt öfter als Leicht', () => {
     const [leicht, , schwer] = LEVELS as [Level, Level, Level];
     expect(schwer.chase).toBeGreaterThan(leicht.chase);
+  });
+
+  it('Bombe vor, neben oder hinter dem Monster', () => {
+    const m = mob(5, 5, { face: 'right' });
+    expect(sideOf(m, 5, 5)).toBe('front');
+    expect(sideOf(m, 8, 5)).toBe('front');
+    expect(sideOf(m, 7, 6)).toBe('front');
+    expect(sideOf(m, 5, 3)).toBe('side');
+    expect(sideOf(m, 4, 7)).toBe('side');
+    expect(sideOf(m, 3, 5)).toBe('back');
+    expect(sideOf(mob(5, 5, { face: 'up' }), 5, 3)).toBe('front');
+  });
+
+  it('bemerkt Bomben vorne am schnellsten, seitlich langsamer, hinten am langsamsten', () => {
+    for (const level of LEVELS) {
+      expect(level.react.front).toBeLessThan(level.react.side);
+      expect(level.react.side).toBeLessThan(level.react.back);
+    }
+    const [leicht, , schwer] = LEVELS as [Level, Level, Level];
+    expect(schwer.react.back).toBeLessThan(leicht.react.back);
+
+    const m = mob(5, 1, { face: 'right' });
+    const bomb = (x: number, age: number) => ({
+      x,
+      y: 1,
+      fuse: FUSE - age,
+      range: 2,
+      owner: 0,
+      slide: null,
+      t: 0,
+    });
+    const between = (MITTEL.react.front + MITTEL.react.back) / 2;
+    expect(noticed(MITTEL, m, bomb(7, between))).toBe(true);
+    expect(noticed(MITTEL, m, bomb(3, between))).toBe(false);
+    expect(noticed(MITTEL, m, bomb(3, MITTEL.react.back))).toBe(true);
+  });
+
+  it('läuft weiter, wenn die Bombe frisch hinter ihm liegt, und dreht vor einer Bombe um', () => {
+    const behind: State = {
+      ...field(),
+      bombs: [{ x: 3, y: 1, fuse: FUSE - 0.05, range: 3, owner: 0, slide: null, t: 0 }],
+    };
+    const m = mob(4, 1, { dir: 'left', t: 0.2, face: 'left' });
+    // Bombe vor ihm (es läuft nach links darauf zu): sofort umdrehen
+    expect(mobWant(behind, m, rng(), mobDanger(behind, m, dangerMap(behind)))).toBe('right');
+    // Gleiche Bombe hinter ihm: noch nicht bemerkt, läuft weiter
+    const away = mob(4, 1, { dir: 'right', t: 0.2, face: 'right' });
+    expect(mobWant(behind, away, rng(), mobDanger(behind, away, dangerMap(behind)))).toBe('right');
+    expect(mobDanger(behind, away, dangerMap(behind))[1 * COLS + 5]).toBe(Number.POSITIVE_INFINITY);
   });
 });
 
