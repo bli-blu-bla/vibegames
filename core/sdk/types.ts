@@ -25,6 +25,8 @@ export interface GameJson {
   };
   /** Kurzer Bedienhinweis unter dem Spielfeld, z. B. "Pfeiltasten oder Wischen". */
   controls: string;
+  /** Weitere Hinweise und Regeln, je Eintrag ein Satz. Erscheinen im Info-Modal der Shell. */
+  info?: string[];
   /** IDs aus credits/<id>/. Leeres Array, wenn das Spiel nur Eigenes nutzt. */
   credits: string[];
   /**

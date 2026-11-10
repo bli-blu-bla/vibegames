@@ -157,9 +157,6 @@ export default function Stellwerk({ api, paused }: GameProps) {
         role="img"
         aria-label="Gleisnetz mit Weichen 1 bis 9, Zügen und vier Bahnhöfen"
       />
-      <p className="sw-rotate t-small muted">
-        Tipp: Handy quer halten, dann wird das Stellwerk größer.
-      </p>
     </div>
   );
 }

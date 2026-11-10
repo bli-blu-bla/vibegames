@@ -150,9 +150,6 @@ export default function TrumpfPruegel({ api, paused }: GameProps) {
           </button>
         )}
       </div>
-      <p className="t-small muted tp-help">
-        Pik und Karo +2 Schaden, Kreuz +3 Block, Herz +2 Leben.
-      </p>
     </div>
   );
 }

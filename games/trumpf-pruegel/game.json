@@ -4,5 +4,6 @@
   "category": "karten-wuerfel",
   "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
   "controls": "Karten antippen oder Tasten 1 bis 5, Enter greift an",
+  "info": ["Pik und Karo +2 Schaden, Kreuz +3 Block, Herz +2 Leben."],
   "credits": []
 }

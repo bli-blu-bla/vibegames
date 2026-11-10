@@ -313,6 +313,11 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                   <>
                     <p className="t-heading">Steuerung</p>
                     <p className="t-mono-small muted shell-message">{meta.controls}</p>
+                    {meta.info?.map((line) => (
+                      <p key={line} className="t-small muted shell-message">
+                        {line}
+                      </p>
+                    ))}
                     <p className="t-mono-small muted">P Pause · R Neustart</p>
                     <button type="button" className="btn btn-primary" onClick={closeInfo}>
                       <Play size={20} weight="fill" /> Weiter
