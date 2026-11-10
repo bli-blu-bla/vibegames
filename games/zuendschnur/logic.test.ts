@@ -1,6 +1,7 @@
 import { createRng } from '@core/sdk';
 import { describe, expect, it } from 'vitest';
 import {
+  type Ack,
   applySnapshot,
   BOX,
   COLS,
@@ -23,7 +24,9 @@ import {
   parseInput,
   passable,
   predict,
+  predictOwn,
   ROWS,
+  reconcile,
   removePlayer,
   SPAWNS,
   type State,
@@ -485,5 +488,107 @@ describe('Monster-Verstand', () => {
   it('Schwer jagt öfter als Leicht', () => {
     const [leicht, , schwer] = LEVELS as [Level, Level, Level];
     expect(schwer.chase).toBeGreaterThan(leicht.chase);
+  });
+});
+
+describe('Vorhersage der eigenen Figur', () => {
+  const duel = () => empty(createState(rng(), 'versus', 2));
+  const me = (s: State) => s.players[1] as State['players'][number];
+  const frames = (n: number, q: number, dir: 'left' | null = 'left') =>
+    Array.from({ length: n }, () => ({ q, dir, dt: 0.05 }));
+  /** Position als Zahl: Feld plus Fortschritt in Gehrichtung (hier nur links/rechts) */
+  const pos = (p: State['players'][number]) =>
+    p.x + (p.dir === 'left' ? -p.t : p.dir === 'right' ? p.t : 0);
+  const same = (a: State['players'][number], b: State['players'][number]) => {
+    expect(pos(a)).toBeCloseTo(pos(b), 6);
+    expect(a.y).toBe(b.y);
+  };
+  const steps = (s: State, n: number, input: PlayerInput) => {
+    let st = s;
+    for (let i = 0; i < n; i++) st = update(st, [NO_INPUT, input], 0.05, rng());
+    return st;
+  };
+  const LEFT: PlayerInput = { dir: 'left', bomb: false };
+
+  it('ohne unbestätigte Eingaben bleibt der Host-Zustand', () => {
+    const s = duel();
+    expect(reconcile(s, 1, [], { q: 0, age: 0 })).toBe(s);
+    expect(reconcile(s, 1, frames(5, 1), { q: 2, age: 0 })).toEqual(s);
+  });
+
+  it('spielt unbestätigte Eingaben nach wie der Host sie anwenden würde', () => {
+    const s = duel();
+    const want = steps(s, 10, LEFT);
+    const got = reconcile(s, 1, frames(10, 1), { q: 0, age: 0 });
+    same(me(got), me(want));
+    expect(pos(me(got))).toBeLessThan(pos(me(s)));
+  });
+
+  it('bereits angewendete Zeit der bestätigten Eingabe wird nicht doppelt gespielt', () => {
+    const s = duel();
+    const got = reconcile(s, 1, frames(10, 1), { q: 1, age: 0.5 });
+    same(me(got), me(s));
+  });
+
+  it('Nach dem Loslassen treffen sich Gast und Host nach der Verzögerung', () => {
+    const start = duel();
+    // Host: Eingabe 1 kam nach 0,1 s an, der Snapshot entstand bei 0,3 s (0,2 s Eingabe angewendet)
+    const host = steps(steps(start, 2, NO_INPUT), 4, LEFT);
+    // Gast: hält seit 0,5 s nach links
+    const guestNow = reconcile(host, 1, frames(10, 1), { q: 1, age: 0.2 });
+    const truth = steps(start, 10, LEFT);
+    same(me(guestNow), me(truth));
+  });
+
+  it('Extras sammelt nur der Host auf, der Gast lässt sie liegen', () => {
+    const base = duel();
+    const at = me(base);
+    const i = at.y * COLS + (at.x - 1);
+    const loot = `${base.loot.slice(0, i)}f${base.loot.slice(i + 1)}`;
+    const s = { ...base, loot };
+    const guest = reconcile(s, 1, frames(10, 1), { q: 0, age: 0 });
+    expect(guest.loot).toBe(loot);
+    expect(me(guest).range).toBe(me(s).range);
+    expect(pos(me(guest))).toBeLessThan(pos(me(s)));
+    // Der Host dagegen nimmt es auf
+    expect(me(steps(s, 10, LEFT)).range).toBe(me(s).range + 1);
+  });
+
+  it('eine Wand stoppt die nachgespielte Eingabe', () => {
+    const s = empty(createState(rng(), 'solo', 1));
+    const got = reconcile(s, 0, frames(20, 1, 'left'), { q: 0, age: 0 });
+    expect(got.players[0]?.x).toBe(1);
+  });
+
+  it('keine Vorhersage bei toter Figur, Spielende oder Pause zwischen Stufen', () => {
+    const s = duel();
+    const f = frames(10, 1);
+    const ack: Ack = { q: 0, age: 0 };
+    const dead = { ...s, players: s.players.map((p) => ({ ...p, alive: false })) };
+    expect(reconcile(dead, 1, f, ack)).toBe(dead);
+    const over = { ...s, over: true };
+    expect(reconcile(over, 1, f, ack)).toBe(over);
+    const clear = { ...s, clearIn: 1 };
+    expect(reconcile(clear, 1, f, ack)).toBe(clear);
+  });
+
+  it('predictOwn bewegt die eigene Figur nach der eigenen Eingabe, andere gleiten nur', () => {
+    const s = duel();
+    const next = predictOwn(s, 1, 'left', 0.1);
+    expect(pos(me(next))).toBeLessThan(pos(me(s)));
+    expect(next.players[0]).toEqual(predict(s, 0.1).players[0]);
+  });
+
+  it('Snapshot trägt die Bestätigung, parseInput prüft die Nummer', () => {
+    const s = duel();
+    const acks: Ack[] = [];
+    acks[1] = { q: 7, age: 0.1234 };
+    const snap = JSON.parse(JSON.stringify(toSnapshot(s, [], null, acks)));
+    expect(snap.ak[1]).toEqual([7, 0.123]);
+    expect(snap.ak[0]).toEqual([0, 0]);
+    expect(parseInput({ dir: 'up', bomb: false, q: 3 })).toEqual({ dir: 'up', bomb: false, q: 3 });
+    expect(parseInput({ dir: 'up', bomb: false, q: -1 }).q).toBeUndefined();
+    expect(parseInput({ dir: 'up', bomb: false, q: 1.5 }).q).toBeUndefined();
+    expect(parseInput({ dir: 'up', bomb: false, q: '3' }).q).toBeUndefined();
   });
 });

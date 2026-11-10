@@ -15,12 +15,14 @@ import {
 import { Bomb, User, Users } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type Ack,
   applySnapshot,
   BOX,
   COLS,
   createState,
   DEFAULT_LEVEL,
   type Dir,
+  type Frame,
   FUSE,
   type GameEvent,
   type Item,
@@ -32,8 +34,9 @@ import {
   type PlayerInput,
   parseInput,
   posOf,
-  predict,
+  predictOwn,
   ROWS,
+  reconcile,
   removePlayer,
   type Snapshot,
   type State,
@@ -55,6 +58,8 @@ const SCALE = 1.5;
 /** Höchstbreite: SCALE-fache Größe, aber nie höher als das Fenster (minus Leiste und Knöpfe) erlaubt */
 const MAX_FIELD_WIDTH = `min(${WIDTH * SCALE}px, max(${WIDTH}px, calc((100dvh - 300px) * ${COLS} / ${ROWS})))`;
 const SNAPSHOT_HZ = 20;
+/** Der Gast merkt sich höchstens so viele Bilder für die Vorhersage (ca. 4 s bei 60 Hz) */
+const MAX_FRAMES = 240;
 const MONO = '"Geist Mono", ui-monospace, monospace';
 const PIXEL = '"Pixelify Sans", system-ui, sans-serif';
 /** Farbe pro Platz. Dazu trägt jede Figur ihre Nummer, Farbe ist nie allein die Unterscheidung. */
@@ -113,6 +118,10 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   const outbox = useRef<GameEvent[]>([]);
   const sinceSnap = useRef(0);
   const lastSent = useRef<State | null>(null);
+  /** Host: zuletzt bestätigte Eingabe pro Platz. Gast: Nummer der letzten Eingabe und Bilder seitdem */
+  const acks = useRef<Ack[]>([]);
+  const seq = useRef(0);
+  const frames = useRef<Frame[]>([]);
   const reported = useRef(false);
 
   const colors = useColors();
@@ -209,6 +218,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
     const prev = guestInputs.current[seat] ?? NO_INPUT;
     // Bombe bleibt gemerkt, bis der nächste Schritt sie gelegt hat
     guestInputs.current[seat] = { dir: inp.dir, bomb: prev.bomb || inp.bomb };
+    acks.current[seat] = { q: inp.q ?? 0, age: 0 };
   });
 
   useNet<number>(net, '$left', (seat) => {
@@ -216,7 +226,11 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   });
 
   useNet<Snapshot>(net, 'snap', (snap) => {
-    if (guest) apply(applySnapshot(snap, state.current));
+    if (!guest) return;
+    const [q, age] = snap.ak?.[mySeat] ?? [0, 0];
+    frames.current = frames.current.filter((f) => f.q >= q);
+    // Host-Zustand, die eigene Figur danach mit den noch unbestätigten Eingaben nachgezogen
+    apply(reconcile(applySnapshot(snap, state.current), mySeat, frames.current, { q, age }));
   });
 
   // ---------- Ablauf ----------
@@ -254,10 +268,13 @@ export default function Zuendschnur({ api, paused }: GameProps) {
       const mine = local[0] ?? NO_INPUT;
       const now = performance.now();
       if (mine.bomb || mine.dir !== sentInput.current.dir || now - sentInput.current.at > 250) {
-        net?.send('input', mine);
+        seq.current += 1;
+        net?.send('input', { ...mine, q: seq.current });
         sentInput.current = { dir: mine.dir, at: now };
       }
-      state.current = predict(state.current, dt);
+      frames.current.push({ q: seq.current, dir: mine.dir, dt });
+      if (frames.current.length > MAX_FRAMES) frames.current.shift();
+      state.current = predictOwn(state.current, mySeat, mine.dir, dt);
     } else if (startedRef.current) {
       const inputs = net
         ? [
@@ -267,12 +284,16 @@ export default function Zuendschnur({ api, paused }: GameProps) {
         : local;
       const next = update(state.current, inputs, dt, rng);
       guestInputs.current = guestInputs.current.map((g) => (g ? { ...g, bomb: false } : g));
+      for (const a of acks.current) if (a) a.age += dt;
       apply(next);
       if (net) {
         sinceSnap.current += dt;
         if (sinceSnap.current >= 1 / SNAPSHOT_HZ || next.over) {
           sinceSnap.current = 0;
-          net.send('snap', toSnapshot(state.current, outbox.current, lastSent.current));
+          net.send(
+            'snap',
+            toSnapshot(state.current, outbox.current, lastSent.current, acks.current),
+          );
           lastSent.current = state.current;
           outbox.current = [];
         }

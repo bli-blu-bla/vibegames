@@ -171,6 +171,8 @@ export interface PlayerInput {
   dir: Dir | null;
   /** Bombe legen (ein Druck, nicht gehalten) */
   bomb: boolean;
+  /** Online: laufende Nummer der Eingabe des Gasts, der Host bestätigt sie im Snapshot */
+  q?: number;
 }
 export const NO_INPUT: PlayerInput = { dir: null, bomb: false };
 
@@ -798,6 +800,8 @@ export interface Snapshot {
   e: 0 | 1;
   /** Sieger, -1 = keiner */
   v: number;
+  /** Bestätigung der Gast-Eingaben, pro Platz [Nummer der letzten Eingabe, Sekunden seit Eingang] */
+  ak: [number, number][];
   /** Ereignisse */
   ev: GameEvent[];
 }
@@ -828,7 +832,12 @@ const moverIn = (m: MoverWire): Mover => ({
  * `sent`: der zuletzt geschickte Zustand. Hat sich das Feld seitdem nicht geändert, bleibt es weg.
  * Der erste Snapshot (`sent` = null) enthält es immer.
  */
-export function toSnapshot(s: State, events: GameEvent[], sent: State | null = null): Snapshot {
+export function toSnapshot(
+  s: State,
+  events: GameEvent[],
+  sent: State | null = null,
+  acks: readonly Ack[] = [],
+): Snapshot {
   const snap: Snapshot = {
     m: s.mode === 'versus' ? 1 : 0,
     l: LEVELS.indexOf(s.level),
@@ -859,6 +868,10 @@ export function toSnapshot(s: State, events: GameEvent[], sent: State | null = n
     w: s.clearIn ?? -1,
     e: s.over ? 1 : 0,
     v: s.winner ?? -1,
+    ak: s.players.map((p) => {
+      const a = acks[p.seat];
+      return a ? [a.q, r3(a.age)] : [0, 0];
+    }),
     ev: events,
   };
   if (!sent || sent.tiles !== s.tiles || sent.loot !== s.loot) snap.g = [s.tiles, s.loot];
@@ -903,6 +916,64 @@ export function applySnapshot(snap: Snapshot, prev: State | null = null): State 
   };
 }
 
+// ---------- Vorhersage der eigenen Figur (Gast) ----------
+
+/** Was der Host zuletzt von einem Gast bekommen hat: Nummer der Eingabe und Sekunden seitdem */
+export interface Ack {
+  q: number;
+  age: number;
+}
+
+/** Ein Bild des Gasts: welche Eingabe (Nummer, Richtung) galt wie lange */
+export interface Frame {
+  q: number;
+  dir: Dir | null;
+  dt: number;
+}
+
+/** Nur die eigene Figur einen Schritt bewegen (ohne Zufall, Bomben, Extras oder Kick: das macht der Host). */
+function stepOwn(s: State, seat: number, dir: Dir | null, dt: number): State {
+  const players = s.players.map((p) => {
+    if (p.seat !== seat || !p.alive) return p;
+    const moved = moveMover(p, dir, dt, (x, y) => passable(s, x, y));
+    return moved.guard > 0 ? { ...moved, guard: Math.max(0, moved.guard - dt) } : moved;
+  });
+  return { ...s, players };
+}
+
+/** Wie `predict`, aber die eigene Figur folgt der eigenen Eingabe statt nur weiterzugleiten. */
+export function predictOwn(s: State, seat: number, dir: Dir | null, dt: number): State {
+  if (s.over) return s;
+  const next = predict(s, dt);
+  const own = stepOwn(s, seat, dir, dt).players.find((p) => p.seat === seat);
+  if (!own) return next;
+  return { ...next, players: next.players.map((p) => (p.seat === seat ? own : p)) };
+}
+
+/**
+ * Host-Zustand übernehmen und die eigene Figur auf die noch unbestätigten Eingaben bringen.
+ * Eingaben bis zur bestätigten Nummer hat der Host schon angewendet, die bestätigte selbst
+ * `ack.age` Sekunden lang. Alles danach spielt der Gast nach.
+ */
+export function reconcile(host: State, seat: number, frames: readonly Frame[], ack: Ack): State {
+  const me = host.players.find((p) => p.seat === seat);
+  // Wo der Host niemanden bewegt, gibt es nichts vorherzusagen
+  if (!me?.alive || host.over || host.clearIn !== null) return host;
+  let st = host;
+  let skip = ack.age;
+  for (const f of frames) {
+    if (f.q < ack.q) continue;
+    let dt = f.dt;
+    if (f.q === ack.q) {
+      const used = Math.min(skip, dt);
+      skip -= used;
+      dt -= used;
+    }
+    if (dt > 0) st = stepOwn(st, seat, f.dir, dt);
+  }
+  return st;
+}
+
 /** Gast zwischen zwei Snapshots: nur weiterbewegen und Zeit laufen lassen, ohne Zufall und Punkte. */
 export function predict(s: State, dt: number): State {
   if (s.over) return s;
@@ -934,5 +1005,6 @@ export function parseInput(data: unknown): PlayerInput {
     typeof d.dir === 'string' && (DIRS as readonly string[]).includes(d.dir)
       ? (d.dir as Dir)
       : null;
-  return { dir, bomb: d.bomb === true };
+  const q = typeof d.q === 'number' && Number.isInteger(d.q) && d.q >= 0 ? d.q : undefined;
+  return q === undefined ? { dir, bomb: d.bomb === true } : { dir, bomb: d.bomb === true, q };
 }
