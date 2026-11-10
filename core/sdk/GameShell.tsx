@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Globe,
   Handshake,
+  Info,
   Moon,
   Pause,
   Play,
@@ -43,6 +44,7 @@ interface Props {
 export function GameShell({ meta, game: Game, room = null, localNet = false }: Props) {
   const { score, status, run, pause: localPause, restart: localRestart } = useShellStore();
   const [dialog, setDialog] = useState(false);
+  const [info, setInfo] = useState(false);
   const online = Boolean(meta.multiplayer && room);
   const { session, state: net } = useOnline({
     gameId: meta.id,
@@ -88,6 +90,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
   useEffect(() => {
     localRestart();
     setDialog(false);
+    setInfo(false);
     createStorage('core').set('lastPlayed', meta.id);
   }, [meta.id, localRestart, round, room]);
 
@@ -150,9 +153,24 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
     };
   }, []);
 
+  // Info schließt, sobald das Spiel weiterläuft (Weiter-Button, Escape, P)
+  useEffect(() => {
+    if (status === 'playing') setInfo(false);
+  }, [status]);
+
   const openDialog = () => {
     pause();
+    setInfo(false);
     setDialog(true);
+  };
+  const closeInfo = () => {
+    setInfo(false);
+    if (status === 'paused') togglePause();
+  };
+  const openInfo = () => {
+    pause();
+    setDialog(false);
+    setInfo(true);
   };
 
   const fmt = (v: number) => formatScore(v, meta.score.format);
@@ -224,6 +242,9 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                 <Globe size={20} />
               </button>
             ))}
+          <button type="button" className="btn btn-icon" onClick={openInfo} aria-label="Steuerung">
+            <Info size={20} />
+          </button>
           <button
             type="button"
             className="btn btn-icon"
@@ -280,7 +301,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
             )
           )}
           <AnimatePresence>
-            {ready && (status !== 'playing' || dialog) && (
+            {ready && (status !== 'playing' || dialog || info) && (
               <motion.div
                 className="shell-overlay"
                 initial={{ opacity: 0 }}
@@ -288,7 +309,16 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                {dialog && meta.multiplayer ? (
+                {info ? (
+                  <>
+                    <p className="t-heading">Steuerung</p>
+                    <p className="t-mono-small muted shell-message">{meta.controls}</p>
+                    <p className="t-mono-small muted">P Pause · R Neustart</p>
+                    <button type="button" className="btn btn-primary" onClick={closeInfo}>
+                      <Play size={20} weight="fill" /> Weiter
+                    </button>
+                  </>
+                ) : dialog && meta.multiplayer ? (
                   <OnlineDialog
                     gameId={meta.id}
                     mode={meta.multiplayer}
@@ -323,7 +353,6 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
           </AnimatePresence>
         </div>
         {online && ready && <NetCorner pings={net?.pings ?? {}} />}
-        <p className="t-mono-small muted">{meta.controls} · P Pause · R Neustart</p>
         {meta.multiplayer && !online && (
           <p className="t-small muted shell-hint">
             <Globe size={16} aria-hidden /> {modeLabel(meta.multiplayer, meta.players)}: oben
