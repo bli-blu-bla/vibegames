@@ -71,6 +71,7 @@ export default function TankArena({ api, paused }: GameProps) {
   const guestInput = useRef<PlayerInput>({ moveX: 0, moveY: 0, fire: false });
   const outbox = useRef<GameEvent[]>([]);
   const sinceSnap = useRef(0);
+  const lastSent = useRef<State | null>(null);
   const reported = useRef(false);
 
   const keys = usePressedKeys();
@@ -145,10 +146,9 @@ export default function TankArena({ api, paused }: GameProps) {
   // Online: Snapshot beim Gast empfangen
   useNet<Snapshot>(net, 'snap', (snap) => {
     if (guest) {
-      if (snap.mode === 'coop' || snap.mode === 'versus') {
-        setOnlineMode(snap.mode);
-      }
-      apply(applySnapshot(state.current, snap));
+      const next = applySnapshot(state.current, snap);
+      if (next.mode === 'coop' || next.mode === 'versus') setOnlineMode(next.mode);
+      apply(next);
     }
   });
 
@@ -200,7 +200,8 @@ export default function TankArena({ api, paused }: GameProps) {
         sinceSnap.current += dt;
         if (sinceSnap.current >= 1 / SNAPSHOT_HZ || isOver(state.current)) {
           sinceSnap.current = 0;
-          net.send('snap', toSnapshot(state.current, outbox.current));
+          net.send('snap', toSnapshot(state.current, outbox.current, lastSent.current));
+          lastSent.current = state.current;
           outbox.current = [];
         }
       }

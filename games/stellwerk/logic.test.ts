@@ -144,7 +144,10 @@ describe('Online (Koop)', () => {
     expect(guest.trains[0]?.trail.length).toBeGreaterThan(0);
     host = update(host, 0.05, r);
     const next = applySnapshot(guest, toSnapshot(host, []));
-    expect(next.trains[0]?.trail[0]).toMatchObject({ x: host.trains[0]?.x, y: host.trains[0]?.y });
+    expect(next.trains[0]?.trail[0]?.x).toBeCloseTo(host.trains[0]?.x ?? 0, 1);
+    expect(next.trains[0]?.trail[0]?.y).toBeCloseTo(host.trains[0]?.y ?? 0, 1);
+    expect(guest.switches).toEqual(host.switches);
+    expect(guest.cows).toHaveLength(host.cows.length);
   });
 
   it('predict bewegt nur die Züge', () => {

@@ -234,6 +234,22 @@ describe('Tank Arena Logik', () => {
     expect(restored.round).toBe(coop.round);
     expect(restored.players).toHaveLength(2);
 
+    expect(restored.obstacles).toEqual(coop.obstacles);
+    expect(restored.barrels).toEqual(coop.barrels);
+    expect(restored.enemies.map((e) => e.id)).toEqual(coop.enemies.map((e) => e.id));
+    expect(restored.enemies[0]?.x).toBeCloseTo(coop.enemies[0]?.x ?? 0, 0);
+
+    // Feld nur bei Änderung
+    const again = toSnapshot(coop, [], coop);
+    expect(again.k).toBeUndefined();
+    expect(applySnapshot(coop, again).obstacles).toEqual(coop.obstacles);
+    expect(JSON.stringify(again).length).toBeLessThan(JSON.stringify(snap).length / 2);
+    const hit = {
+      ...coop,
+      obstacles: coop.obstacles.map((o, i) => (i === 0 ? { ...o, hp: o.hp - 1 } : o)),
+    };
+    expect(toSnapshot(hit, [], coop).k).toBeDefined();
+
     const predicted = predict(restored, 0.05);
     expect(predicted.players).toHaveLength(2);
 

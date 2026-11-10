@@ -342,27 +342,104 @@ export function wagonPose(t: Train, k: number, gap = 26): Pose {
 
 // ---------- Online (Koop) ----------
 
-/** Zug ohne Spur: Die Wagen rechnet der Gast selbst nach. */
-export type TrainSnap = Omit<Train, 'trail'>;
-export interface Snapshot extends Omit<State, 'trains'> {
-  trains: TrainSnap[];
+// Kurze Feldnamen: Der Snapshot geht 20-mal pro Sekunde raus. Ohne Spur der Züge:
+// Die Wagen rechnet der Gast selbst nach.
+type TrainWire = {
+  i: number;
+  c: string;
+  d: StationKey;
+  e: number;
+  s: number;
+  v: number;
+  n: number;
+  b: number;
+  k: 0 | 1;
+  x: number;
+  y: number;
+  a: number;
+};
+type CowWire = { i: number; x: number; y: number; n: string; t: number };
+
+export interface Snapshot {
+  /** Weichenstellung, in der Reihenfolge von SWITCHES */
+  w: number[];
+  t: TrainWire[];
+  c: CowWire[];
+  /** Score, Kombo, Leben, Restzeit, geliefert */
+  o: number;
+  m: number;
+  l: number;
+  r: number;
+  g: number;
+  ev: GameEvent[];
 }
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Was der Host verschickt. `events` sind alle Ereignisse seit dem letzten Snapshot. */
 export function toSnapshot(s: State, events: GameEvent[]): Snapshot {
-  return { ...s, events, trains: s.trains.map(({ trail: _, ...t }) => t) };
+  return {
+    w: SWITCHES.map((sw) => s.switches[sw.id] ?? 0),
+    t: s.trains.map((t) => ({
+      i: t.id,
+      c: t.code,
+      d: t.dest,
+      e: t.edge,
+      s: r2(t.dist),
+      v: r2(t.speed),
+      n: t.wagons,
+      b: r2(t.brake),
+      k: t.blocked ? 1 : 0,
+      x: r2(t.x),
+      y: r2(t.y),
+      a: r2(t.angle),
+    })),
+    c: s.cows.map((c) => ({ i: c.id, x: r2(c.x), y: r2(c.y), n: c.name, t: r2(c.timer) })),
+    o: s.score,
+    m: s.combo,
+    l: s.lives,
+    r: r2(s.timeLeft),
+    g: s.delivered,
+    ev: events,
+  };
 }
 
 /** Snapshot beim Gast übernehmen. Die Spuren der Züge laufen lokal weiter. */
 export function applySnapshot(prev: State, snap: Snapshot): State {
-  const trains = snap.trains.map((t): Train => {
+  const trains = snap.t.map((w): Train => {
+    const t = {
+      id: w.i,
+      code: w.c,
+      dest: w.d,
+      edge: w.e,
+      dist: w.s,
+      speed: w.v,
+      wagons: w.n,
+      brake: w.b,
+      blocked: w.k === 1,
+      x: w.x,
+      y: w.y,
+      angle: w.a,
+    };
     const old = prev.trains.find((o) => o.id === t.id);
     if (!old) return { ...t, trail: initialTrail(t) };
     const moved = Math.hypot(t.x - old.x, t.y - old.y) > 0.5;
     const pose = { x: t.x, y: t.y, angle: t.angle };
     return { ...t, trail: moved ? [pose, ...old.trail].slice(0, TRAIL_MAX) : old.trail };
   });
-  return { ...snap, trains };
+  return {
+    // spawnIn, cowIn und nextId braucht nur der Host
+    ...prev,
+    switches: Object.fromEntries(SWITCHES.map((sw, i) => [sw.id, snap.w[i] ?? 0])),
+    trains,
+    cows: snap.c.map((c) => ({ id: c.i, x: c.x, y: c.y, name: c.n, timer: c.t })),
+    score: snap.o,
+    combo: snap.m,
+    lives: snap.l,
+    timeLeft: snap.r,
+    delivered: snap.g,
+    events: snap.ev,
+  };
 }
 
 /**

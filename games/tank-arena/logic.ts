@@ -813,17 +813,201 @@ export function update(state: State, input: Input, dt: number, rng: Rng): State 
 
 // ---------- Online-Multiplayer (Koop & Versus) ----------
 
-export type Snapshot = Omit<State, 'level'> & { levelName: Level['name'] };
+// Kurze Feldnamen: Der Snapshot geht 20-mal pro Sekunde raus. Hindernisse und Fässer (`k`) stehen
+// nur drin, wenn sie sich seit dem letzten Snapshot geändert haben (Treffer, Zerstörung).
+type PlayerWire = { i: 1 | 2; x: number; y: number; a: number; l: number; c: number; u: number };
+type EnemyWire = { i: number; x: number; y: number; a: number; c: number; t: number; s: number };
+type ObstacleWire = {
+  i: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  d: 0 | 1;
+  p: number;
+  m: number;
+};
+type BarrelWire = { i: number; x: number; y: number; r: number };
+type BulletWire = { i: number; x: number; y: number; u: number; v: number; o: number; f: 0 | 1 };
+type ExplosionWire = { i: number; x: number; y: number; r: number; t: number; m: number };
 
-export function toSnapshot(s: State, events: GameEvent[] = s.events): Snapshot {
-  const { level, ...rest } = s;
-  return { ...rest, events, levelName: level.name };
+export interface Snapshot {
+  /** Modus: 0 solo, 1 coop, 2 versus */
+  m: 0 | 1 | 2;
+  /** Index des Levels */
+  v: number;
+  /** Runde */
+  r: number;
+  /** Score */
+  c: number;
+  /** Leben (Team) */
+  l: number;
+  p: PlayerWire[];
+  e: EnemyWire[];
+  /** Hindernisse und Fässer, nur bei Änderung */
+  k?: [ObstacleWire[], BarrelWire[]];
+  b: BulletWire[];
+  x: ExplosionWire[];
+  /** nextId */
+  n: number;
+  /** Sieger, 0 = keiner */
+  w: 0 | 1 | 2;
+  ev: GameEvent[];
 }
 
+const MODES: GameMode[] = ['solo', 'coop', 'versus'];
+const r1 = (n: number) => Math.round(n * 10) / 10;
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+const obstacleWire = (o: Obstacle): ObstacleWire => ({
+  i: o.id,
+  x: o.x,
+  y: o.y,
+  w: o.w,
+  h: o.h,
+  d: o.destructible ? 1 : 0,
+  p: o.hp,
+  m: o.maxHp,
+});
+
+/** Hindernisse bewegen sich nicht: Id, Ort und Treffer reichen zum Vergleichen (auch bei neuem Feld). */
+function sameField(a: State, b: State): boolean {
+  return (
+    a.obstacles.length === b.obstacles.length &&
+    a.barrels.length === b.barrels.length &&
+    a.obstacles.every((o, i) => {
+      const q = b.obstacles[i];
+      return o.id === q?.id && o.x === q.x && o.y === q.y && o.hp === q.hp;
+    }) &&
+    a.barrels.every((o, i) => {
+      const q = b.barrels[i];
+      return o.id === q?.id && o.x === q.x && o.y === q.y;
+    })
+  );
+}
+
+/** `sent`: zuletzt geschickter Zustand. Der erste Snapshot (`null`) enthält das Feld immer. */
+export function toSnapshot(
+  s: State,
+  events: GameEvent[] = s.events,
+  sent: State | null = null,
+): Snapshot {
+  const snap: Snapshot = {
+    m: MODES.indexOf(s.mode) as 0 | 1 | 2,
+    v: LEVELS.indexOf(s.level),
+    r: s.round,
+    c: s.score,
+    l: s.lives,
+    p: s.players.map((p) => ({
+      i: p.id,
+      x: r1(p.x),
+      y: r1(p.y),
+      a: r2(p.angle),
+      l: p.lives,
+      c: r2(p.cooldown),
+      u: r2(p.invuln),
+    })),
+    e: s.enemies.map((e) => ({
+      i: e.id,
+      x: r1(e.x),
+      y: r1(e.y),
+      a: r2(e.angle),
+      c: r2(e.cooldown),
+      t: r2(e.aiTimer),
+      s: e.strafe,
+    })),
+    b: s.bullets.map((b) => ({
+      i: b.id,
+      x: r1(b.x),
+      y: r1(b.y),
+      u: r1(b.vx),
+      v: r1(b.vy),
+      o: b.ownerId,
+      f: b.fromPlayer ? 1 : 0,
+    })),
+    x: s.explosions.map((e) => ({
+      i: e.id,
+      x: r1(e.x),
+      y: r1(e.y),
+      r: e.radius,
+      t: r2(e.timer),
+      m: e.maxTimer,
+    })),
+    n: s.nextId,
+    w: s.winner ?? 0,
+    ev: events,
+  };
+  if (!sent || !sameField(sent, s)) {
+    snap.k = [
+      s.obstacles.map(obstacleWire),
+      s.barrels.map((b) => ({ i: b.id, x: b.x, y: b.y, r: b.radius })),
+    ];
+  }
+  return snap;
+}
+
+/** `prev`: bisheriger Zustand des Gasts, von dem Level und (ohne `k`) das Feld kommen. */
 export function applySnapshot(prev: State, snap: Snapshot): State {
-  const level = LEVELS.find((l) => l.name === snap.levelName) ?? prev.level;
-  const { levelName: _, ...rest } = snap;
-  return { ...rest, level };
+  return {
+    mode: MODES[snap.m] ?? prev.mode,
+    level: LEVELS[snap.v] ?? prev.level,
+    round: snap.r,
+    score: snap.c,
+    lives: snap.l,
+    players: snap.p.map((p) => ({
+      id: p.i,
+      x: p.x,
+      y: p.y,
+      angle: p.a,
+      lives: p.l,
+      cooldown: p.c,
+      invuln: p.u,
+    })),
+    enemies: snap.e.map((e) => ({
+      id: e.i,
+      x: e.x,
+      y: e.y,
+      angle: e.a,
+      cooldown: e.c,
+      aiTimer: e.t,
+      strafe: e.s,
+    })),
+    obstacles: snap.k
+      ? snap.k[0].map((o) => ({
+          id: o.i,
+          x: o.x,
+          y: o.y,
+          w: o.w,
+          h: o.h,
+          destructible: o.d === 1,
+          hp: o.p,
+          maxHp: o.m,
+        }))
+      : prev.obstacles,
+    barrels: snap.k
+      ? snap.k[1].map((b) => ({ id: b.i, x: b.x, y: b.y, radius: b.r }))
+      : prev.barrels,
+    bullets: snap.b.map((b) => ({
+      id: b.i,
+      x: b.x,
+      y: b.y,
+      vx: b.u,
+      vy: b.v,
+      ownerId: b.o,
+      fromPlayer: b.f === 1,
+    })),
+    explosions: snap.x.map((e) => ({
+      id: e.i,
+      x: e.x,
+      y: e.y,
+      radius: e.r,
+      timer: e.t,
+      maxTimer: e.m,
+    })),
+    nextId: snap.n,
+    winner: snap.w === 0 ? null : snap.w,
+    events: snap.ev,
+  };
 }
 
 /** Zwischen zwei Snapshots beim Gast: Projektile und Explosionen flüssig weiterbewegen. */
