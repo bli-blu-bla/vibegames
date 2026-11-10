@@ -36,6 +36,19 @@ Ein Game darf innerhalb der Spielfläche abweichen:
 
 Faustregel: Wer das Spielfeld abdeckt, erkennt trotzdem Shell, Schrift, Rundungen und Icons als VibeGames.
 
+## Spielfeld und Spielleiste
+
+- **Größe:** Das Spielfeld nutzt am Desktop die verfügbare Breite der Shell (bis 1280px) und ist dort deutlich größer als mobil. Auf dem Smartphone füllt es die Breite abzüglich Seitenrand. Das Seitenverhältnis bleibt gleich, nur die Skalierung ändert sich. Bedienelemente bleiben mindestens 44px hoch.
+- **Leiste über dem Spielfeld:** Eine Zeile. Links der Modus (Icon-Buttons, zum Beispiel 1 Spieler / 2 Spieler), rechts die Schwierigkeit (Leicht, Mittel, Schwer) als Button-Gruppe. Aktive Auswahl in `accent` mit `on-accent`, die übrigen in `surface-100` mit `line-strong`. Gibt es nur eines von beiden, steht es auf seiner Seite. Auf dem Smartphone darf die Zeile umbrechen.
+- **Statuszeile unter dem Spielfeld:** `mono-small` in `ink-muted`, ein Hinweis pro Zeile. Zusätzliche Aktionen (zum Beispiel Bombe, Flagge) als Buttons darunter.
+- **Geschlossenes Layout:** Ein Game ist ein zusammenhängender Block aus Leiste, Spielfeld und Status. Die Leiste und das Spielfeld teilen sich dieselbe Breite und dieselbe Kante, damit nichts lose im Raum steht. Ein Rahmen um das Ganze ist für Games mit Bedienelementen im Spielfeld (Minenfeld) erwünscht, für Games mit reiner Tastatursteuerung nicht nötig.
+- Gilt für neue und bestehende Games. Abweichungen brauchen einen Grund im Code-Kommentar.
+
+## Dialoge
+
+- Dialoge (Steuerung, Hinweise) liegen als Panel (`.shell-modal`) auf dem Overlay-Scrim der Shell: `surface-200`, Rahmen `line`, `radius-lg`, Innenabstand `space-5`. Das Spielfeld scheint nie direkt hinter Text durch.
+- Pause, Game Over und Lobby stehen direkt auf dem Scrim, weil sie nur kurze Texte enthalten.
+
 ## Farbe
 
 - Text: `ink` für Haupttext, `ink-muted` für Sekundärtext. Beide auf `surface-100`, `surface-200` und `surface-300` im Kontrast mindestens 4,5:1 in beiden Themes.

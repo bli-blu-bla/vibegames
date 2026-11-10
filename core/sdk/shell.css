@@ -84,6 +84,20 @@
   border-radius: var(--radius-sm);
 }
 
+/* Panel für Dialoge im Overlay: Info, später weitere Hinweise */
+.shell-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: min(100%, 480px);
+  padding: var(--space-5);
+  background: var(--surface-200);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
 .shell-result {
   display: flex;
   align-items: center;

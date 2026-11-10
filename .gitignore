@@ -10,3 +10,7 @@ test-results/
 # Lokale Umgebungsvariablen (z. B. TURN-Zugang)
 .env.local
 .env.*.local
+
+# Editor und lokale Claude-Dateien
+.idea/
+.claude/

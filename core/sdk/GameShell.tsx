@@ -310,7 +310,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                 transition={{ duration: 0.15 }}
               >
                 {info ? (
-                  <>
+                  <div className="shell-modal">
                     <p className="t-heading">Steuerung</p>
                     <p className="t-mono-small muted shell-message">{meta.controls}</p>
                     {meta.info?.map((line) => (
@@ -322,7 +322,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
                     <button type="button" className="btn btn-primary" onClick={closeInfo}>
                       <Play size={20} weight="fill" /> Weiter
                     </button>
-                  </>
+                  </div>
                 ) : dialog && meta.multiplayer ? (
                   <OnlineDialog
                     gameId={meta.id}
