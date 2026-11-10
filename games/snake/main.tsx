@@ -57,9 +57,14 @@ export default function Snake({ api, paused }: GameProps) {
   }, [canvas, state, colors]);
 
   return (
-    <div ref={fieldRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+    <div
+      ref={fieldRef}
+      style={{ width: '100%', maxWidth: 720, display: 'flex', justifyContent: 'center' }}
+    >
+      {/* Desktop: Spielfeld größer als die logische Größe, mobil füllt es die Breite */}
       <canvas
         {...canvas.props}
+        style={{ ...canvas.props.style, maxWidth: 'none' }}
         role="img"
         aria-label={`Spielfeld: Schlange mit ${state.snake.length} Segmenten`}
       />
