@@ -71,3 +71,15 @@
     font-size: 0.65rem;
   }
 }
+
+@media (min-width: 720px) {
+  .loa {
+    width: min(100%, 520px);
+    padding: var(--space-5);
+  }
+
+  .loa-grid {
+    max-width: 440px;
+    gap: var(--space-3);
+  }
+}
