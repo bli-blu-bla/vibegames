@@ -79,6 +79,9 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
   const [best, setBest] = useState<number | null>(() => storage.get<number | null>('best', null));
   const [newRecord, setNewRecord] = useState(false);
   const [result, setResult] = useState<GameResult>({});
+  // Siege/Niederlagen gegen andere (nur online bei `versus`), pro Spiel gespeichert
+  const versus = meta.multiplayer === 'versus';
+  const [tally, setTally] = useState<Tally>(() => storage.get('tally', EMPTY_TALLY));
 
   // Frischer Shell-Zustand beim Öffnen eines Spiels und bei jeder neuen Online-Runde
   // biome-ignore lint/correctness/useExhaustiveDependencies: round und room setzen bewusst zurück
@@ -113,6 +116,11 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
           !online && final > 0 && (meta.score.better === 'higher' || outcome === 'win');
         const record = counts && isBetter(final, previous, meta.score.better);
         setResult(res);
+        if (online && versus) {
+          const next = addOutcome(storage.get('tally', EMPTY_TALLY), outcome);
+          storage.set('tally', next);
+          setTally(next);
+        }
         if (record) {
           storage.set('best', final);
           setBest(final);
@@ -121,7 +129,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
         useShellStore.getState().gameOver();
       },
     };
-  }, [meta.id, meta.score.better, storage, run, round, online, room, session]);
+  }, [meta.id, meta.score.better, storage, run, round, online, versus, room, session]);
 
   // Tastatur der Shell: Escape/P pausiert, R startet neu
   const keys = useRef({ togglePause, restart, pause });
@@ -295,6 +303,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
             )}
           </AnimatePresence>
         </div>
+        {online && ready && <NetCorner pings={net?.pings ?? {}} tally={versus ? tally : null} />}
         <p className="t-mono-small muted">{meta.controls} · P Pause · R Neustart</p>
         {meta.multiplayer && !online && (
           <p className="t-small muted shell-hint">
@@ -309,6 +318,40 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
         )}
       </main>
     </div>
+  );
+}
+
+interface Tally {
+  win: number;
+  lose: number;
+  draw: number;
+}
+
+const EMPTY_TALLY: Tally = { win: 0, lose: 0, draw: 0 };
+
+function addOutcome(t: Tally, outcome: 'win' | 'lose' | 'draw'): Tally {
+  return { ...t, [outcome]: t[outcome] + 1 };
+}
+
+/** Ecke unten rechts: Ping zu den Mitspielern und bei `versus` die Bilanz */
+function NetCorner({ pings, tally }: { pings: Record<number, number>; tally: Tally | null }) {
+  const seats = Object.keys(pings)
+    .map(Number)
+    .sort((a, b) => a - b);
+  return (
+    <output className="t-mono-small muted shell-corner" data-testid="net-corner">
+      {tally && (
+        <span>
+          {tally.win} Siege · {tally.lose} Niederlagen
+          {tally.draw > 0 ? ` · ${tally.draw} Remis` : ''}
+        </span>
+      )}
+      {seats.map((seat) => (
+        <span key={seat}>
+          {seat === 0 ? 'Host' : `Spieler ${seat + 1}`} {pings[seat]} ms
+        </span>
+      ))}
+    </output>
   );
 }
 

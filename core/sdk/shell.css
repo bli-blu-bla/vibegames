@@ -230,3 +230,15 @@
 .shell-detail {
   overflow-wrap: anywhere;
 }
+
+/* ---------- Ping und Bilanz (unten rechts) ---------- */
+.shell-corner {
+  position: fixed;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  pointer-events: none;
+}

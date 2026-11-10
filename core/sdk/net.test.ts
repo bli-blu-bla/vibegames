@@ -269,6 +269,19 @@ describe('NetSession mit bis zu vier Spielern', () => {
     expect(c.s.game()).toMatchObject({ seat: 2, players: 3 });
   });
 
+  it('misst den Ping zu den Mitspielern der Runde', async () => {
+    const net = memoryNet();
+    const a = join(net, 'a', 3);
+    const b = join(net, 'b', 3);
+    const c = join(net, 'c', 3);
+    await settle(net);
+    a.s.start();
+    await settle(net);
+    expect(Object.keys(a.s.state.pings).sort()).toEqual(['1', '2']);
+    expect(Object.keys(b.s.state.pings)).toEqual(['0']);
+    expect(c.s.state.pings[0]).toBeGreaterThanOrEqual(0);
+  });
+
   it('startet von selbst, wenn der Raum voll ist, und weist den Fünften ab', async () => {
     const net = memoryNet();
     const all = ['a', 'b', 'c', 'd'].map((id) => join(net, id, 4));

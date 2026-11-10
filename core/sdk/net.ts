@@ -186,6 +186,8 @@ export interface NetState {
   reason?: 'insecure' | 'network' | 'p2p';
   /** Technische Fehlermeldung für die Anzeige */
   detail?: string;
+  /** Ping in ms zu den Mitspielern der Runde, Schlüssel = Platz. Gast: nur der Host (Platz 0). */
+  pings: Record<number, number>;
 }
 
 export interface SessionEvents {
@@ -193,6 +195,9 @@ export interface SessionEvents {
   /** Ein Mitspieler hat pausiert oder fortgesetzt */
   pause(paused: boolean): void;
 }
+
+/** So oft (ms) wird der Ping gemessen */
+const PING_INTERVAL = 2000;
 
 /** Nachricht an das Spiel des Hosts, wenn ein Gast mitten in der Runde geht. `data` ist sein Platz. */
 export const LEFT_MESSAGE = '$left';
@@ -229,6 +234,7 @@ export class NetSession {
   private handlers = new Map<string, Set<(data: unknown, seat: number) => void>>();
   private queue: Queued[] = [];
   private closed = false;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
   private readonly events: SessionEvents;
   private readonly mode: NetMode;
   private readonly max: number;
@@ -246,6 +252,7 @@ export class NetSession {
       maxPlayers: this.max,
       queued: false,
       waiting: 0,
+      pings: {},
     };
     // Erst im nächsten Microtask verbinden: Eine sofort wieder geschlossene Sitzung
     // (React StrictMode) meldet sich so gar nicht erst an.
@@ -265,6 +272,7 @@ export class NetSession {
       .then((t) => {
         if (this.closed) return t.leave();
         this.transport = t;
+        this.pingTimer = setInterval(() => this.ping(), PING_INTERVAL);
         if (this.state.status === 'connecting') this.set({ status: 'waiting' });
         this.evaluate();
       })
@@ -331,6 +339,8 @@ export class NetSession {
 
   close() {
     this.closed = true;
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = null;
     this.transport?.leave();
     this.transport = null;
   }
@@ -344,6 +354,23 @@ export class NetSession {
   private set(patch: Partial<NetState>) {
     this.state = { ...this.state, ...patch };
     this.events.change(this.state);
+  }
+
+  /** Ping an alle Mitspieler der Runde schicken (Host an Gäste, Gast an den Host). */
+  private ping() {
+    if (this.state.status !== 'playing') return;
+    const msg = { t: performance.now() };
+    if (this.state.role === 'host') {
+      for (const id of this.roster.slice(1)) if (id) this.sendTo(id, 'ping', msg);
+    } else this.toHost('ping', msg);
+  }
+
+  private onPong(from: string, t: number) {
+    const seat =
+      this.state.role === 'host' ? this.roster.indexOf(from) : from === this.hostId ? 0 : -1;
+    if (seat < 0 || !Number.isFinite(t)) return;
+    const ms = Math.max(0, Math.round(performance.now() - t));
+    if (this.state.pings[seat] !== ms) this.set({ pings: { ...this.state.pings, [seat]: ms } });
   }
 
   private sendTo(id: string, type: string, data?: unknown) {
@@ -418,7 +445,15 @@ export class NetSession {
     this.roster = [];
     this.handlers.clear();
     this.queue = [];
-    this.set({ status: 'waiting', role: null, peerLeft, players: 1, queued: false, waiting: 0 });
+    this.set({
+      status: 'waiting',
+      role: null,
+      peerLeft,
+      players: 1,
+      queued: false,
+      waiting: 0,
+      pings: {},
+    });
     if (wasHost) for (const id of this.known) this.sendTo(id, 'nohost');
     this.evaluate();
   }
@@ -442,8 +477,10 @@ export class NetSession {
       peerLeft: false,
       players: this.roster.length,
       waiting: this.members.length - (this.roster.length - 1),
+      pings: {},
     });
     for (const id of this.members) this.sendTo(id, 'round', { round, seats: this.roster });
+    this.ping();
   }
 
   private onJoin(id: string) {
@@ -594,12 +631,18 @@ export class NetSession {
             peerLeft: false,
             players: seats.filter(Boolean).length,
             queued: false,
+            pings: {},
           });
+          this.ping();
         } else {
           this.set({ status: 'waiting', queued: true, players: seats.filter(Boolean).length });
         }
         return;
       }
+      case 'ping':
+        return this.sendTo(from, 'pong', msg.data);
+      case 'pong':
+        return this.onPong(from, Number(data.t));
       case 'restart':
         if (role === 'host' && this.roster.includes(from)) this.restart();
         return;
