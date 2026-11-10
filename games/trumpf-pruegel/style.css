@@ -126,3 +126,11 @@
   display: flex;
   justify-content: center;
 }
+
+/* Desktop: größere Karte */
+@media (min-width: 720px) {
+  .tp {
+    max-width: 680px;
+    padding: var(--space-5);
+  }
+}
