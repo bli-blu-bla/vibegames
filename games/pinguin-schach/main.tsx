@@ -137,6 +137,22 @@ export default function PinguinSchach({ api, paused }: GameProps) {
 
   return (
     <div className="pgs">
+      {!net && (
+        <fieldset className="pgs-levels" aria-label="Schwierigkeit">
+          {LEVELS.map((l, i) => (
+            <button
+              key={l.name}
+              type="button"
+              className={level === i ? 'btn btn-primary' : 'btn'}
+              aria-pressed={level === i}
+              onClick={() => chooseLevel(i)}
+            >
+              {l.name}
+            </button>
+          ))}
+        </fieldset>
+      )}
+
       <section className="pgs-board" aria-label="Schachbrett">
         {squares.map(({ piece, i }) => {
           const dark = (Math.floor(i / 8) + (i % 8)) % 2 === 1;
@@ -189,23 +205,6 @@ export default function PinguinSchach({ api, paused }: GameProps) {
           </p>
         )}
         {quip && <p className="t-small muted">{quip}</p>}
-
-        {!net && (
-          <fieldset className="pgs-levels">
-            <legend className="t-label muted">PINGUIN</legend>
-            {LEVELS.map((l, i) => (
-              <button
-                key={l.name}
-                type="button"
-                className={level === i ? 'btn btn-primary' : 'btn'}
-                aria-pressed={level === i}
-                onClick={() => chooseLevel(i)}
-              >
-                {l.name}
-              </button>
-            ))}
-          </fieldset>
-        )}
 
         <ol className="pgs-moves t-mono-small" aria-label="Züge">
           {movePairs(game.history).map((pair) => (

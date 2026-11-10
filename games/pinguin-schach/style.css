@@ -85,16 +85,16 @@
   color: var(--danger);
 }
 
+/* Leiste über dem Brett, Schwierigkeit rechts */
 .pgs-levels {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-2);
+  width: 100%;
   margin: 0;
   padding: 0;
   border: 0;
-}
-.pgs-levels legend {
-  margin-bottom: var(--space-2);
 }
 
 .pgs-moves {
@@ -111,5 +111,15 @@
   }
   .pgs-moves {
     min-height: 0;
+  }
+}
+
+/* Desktop: größeres Brett */
+@media (min-width: 1000px) {
+  .pgs-board {
+    width: min(100%, 600px);
+  }
+  .pgs-piece {
+    font-size: 52px;
   }
 }
