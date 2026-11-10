@@ -5,7 +5,8 @@
   "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
   "controls": "WASD oder Pfeiltasten, Leertaste legt eine Bombe, Joystick und Bomben-Knopf am Handy",
   "info": [
-    "Zu zweit an einem Gerät: Spieler 1 WASD und Leertaste, Spieler 2 Pfeiltasten und Enter."
+    "Zu zweit an einem Gerät: Spieler 1 WASD und Leertaste, Spieler 2 Pfeiltasten und Enter.",
+    "Sehr seltenes Extra Hand: Bombe legen und gleich noch mal drücken, dann fliegt sie zwei Felder weit in Blickrichtung, auch über eine Wand oder Kiste."
   ],
   "credits": [],
   "multiplayer": "versus",

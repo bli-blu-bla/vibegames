@@ -22,4 +22,6 @@ export const SOUNDS: Record<GameEvent, number[]> = {
   kick: [0.6, 0, 120, 0, 0.01, 0.08, 4, 1, 20, 0, 0, 0, 0, 0.5],
   // Schild fängt Treffer ab: schimmernder Glockenton
   shield: [0.7, 0, 1200, 0, 0.08, 0.35, 0, 1, 0, 0, 0, 0, 0, 0, 40],
+  // Bombe werfen: steigendes Wusch
+  throw: [0.5, 0, 220, 0.01, 0.04, 0.12, 1, 1, 8],
 };

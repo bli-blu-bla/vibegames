@@ -9,8 +9,8 @@ export const FLOOR = '.';
 export const WALL = '#';
 export const BOX = '+';
 
-/** Extras: mehr Bomben, mehr Reichweite, schneller, Bomben treten, ein Treffer frei */
-export type Item = 'bomb' | 'fire' | 'speed' | 'kick' | 'shield';
+/** Extras: mehr Bomben, mehr Reichweite, schneller, Bomben treten, ein Treffer frei, Bomben werfen */
+export type Item = 'bomb' | 'fire' | 'speed' | 'kick' | 'shield' | 'hand';
 /** Zeichen in `loot` (unter Kisten versteckt, sichtbar sobald dort Boden ist) */
 const ITEM_CHARS: Record<Item, string> = {
   bomb: 'b',
@@ -18,6 +18,7 @@ const ITEM_CHARS: Record<Item, string> = {
   speed: 's',
   kick: 'k',
   shield: 'h',
+  hand: 'w',
 };
 const CHAR_ITEMS: Record<string, Item> = {
   b: 'bomb',
@@ -25,18 +26,28 @@ const CHAR_ITEMS: Record<string, Item> = {
   s: 'speed',
   k: 'kick',
   h: 'shield',
+  w: 'hand',
 };
-/** Ziehung der Extras: Kick und Schild sind seltener */
-const ITEM_POOL: readonly Item[] = [
-  'bomb',
-  'bomb',
-  'fire',
-  'fire',
-  'speed',
-  'speed',
-  'kick',
-  'shield',
-];
+/** Gewichte für die Ziehung der Extras: Kick und Schild sind seltener, die Hand sehr selten */
+export const ITEM_WEIGHTS: Readonly<Record<Item, number>> = {
+  bomb: 6,
+  fire: 6,
+  speed: 6,
+  kick: 3,
+  shield: 3,
+  hand: 1,
+};
+const ITEM_TOTAL = Object.values(ITEM_WEIGHTS).reduce((a, b) => a + b, 0);
+
+/** Ein Extra nach Gewicht ziehen, `roll` liegt in [0, 1) */
+export function itemFor(roll: number): Item {
+  let left = roll * ITEM_TOTAL;
+  for (const [item, weight] of Object.entries(ITEM_WEIGHTS) as [Item, number][]) {
+    left -= weight;
+    if (left < 0) return item;
+  }
+  return 'bomb';
+}
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 const DELTA: Record<Dir, [number, number]> = {
@@ -76,6 +87,8 @@ export const CLEAR_PAUSE = 1.6;
 export const KICK_SPEED = 8;
 /** Sekunden unverwundbar, nachdem der Schild einen Treffer abgefangen hat */
 export const GUARD_TIME = 1.2;
+/** So weit (in Feldern) fliegt eine geworfene Bombe, also über höchstens ein Feld hinweg */
+export const THROW_DIST = 2;
 
 export const POINTS = { box: 10, mob: 100, stage: 500, kill: 100 } as const;
 
@@ -146,6 +159,8 @@ export interface Player extends Mover {
   kick: boolean;
   /** Fängt einen Treffer ab */
   shield: boolean;
+  /** Kann die Bombe unter sich werfen */
+  hand: boolean;
   /** Sekunden, die der Spieler nach einem abgefangenen Treffer noch unverwundbar ist */
   guard: number;
 }
@@ -171,7 +186,16 @@ export interface Flame {
   owner: number;
 }
 
-export type GameEvent = 'place' | 'boom' | 'pickup' | 'death' | 'mob' | 'clear' | 'kick' | 'shield';
+export type GameEvent =
+  | 'place'
+  | 'boom'
+  | 'pickup'
+  | 'death'
+  | 'mob'
+  | 'clear'
+  | 'kick'
+  | 'shield'
+  | 'throw';
 
 export type Mode = 'solo' | 'versus';
 
@@ -257,7 +281,7 @@ function buildField(rng: Rng, spawns: readonly [number, number][]) {
         loot += '.';
       } else if (!nearSpawn(x, y, spawns) && rng.next() < BOX_CHANCE) {
         tiles += BOX;
-        loot += rng.next() < LOOT_CHANCE ? ITEM_CHARS[rng.pick(ITEM_POOL)] : '.';
+        loot += rng.next() < LOOT_CHANCE ? ITEM_CHARS[itemFor(rng.next())] : '.';
       } else {
         tiles += FLOOR;
         loot += '.';
@@ -283,6 +307,7 @@ function spawnPlayer(seat: number, carry?: Player): Player {
     kills: carry?.kills ?? 0,
     kick: carry?.kick ?? false,
     shield: carry?.shield ?? false,
+    hand: carry?.hand ?? false,
     guard: 0,
   };
 }
@@ -653,6 +678,14 @@ function slideBombs(s: State, dt: number): Bomb[] {
   return bombs;
 }
 
+// ---------- Hand ----------
+
+/** Wo eine von (x, y) in Richtung `face` geworfene Bombe landet (Wände dazwischen sind egal) */
+export function throwTarget(face: Dir, x: number, y: number): [number, number] {
+  const [dx, dy] = DELTA[face];
+  return [x + dx * THROW_DIST, y + dy * THROW_DIST];
+}
+
 // ---------- Update ----------
 
 /**
@@ -700,9 +733,19 @@ export function update(s: State, inputs: readonly PlayerInput[], dt: number, rng
       if (item === 'speed') np = { ...np, speed: Math.min(MAX_SPEED, np.speed + SPEED_STEP) };
       if (item === 'kick') np = { ...np, kick: true };
       if (item === 'shield') np = { ...np, shield: true };
+      if (item === 'hand') np = { ...np, hand: true };
+    }
+    // Hand: Bombe drücken, während man auf einer Bombe steht, wirft sie in Blickrichtung
+    const under = bombs.find((b) => b.x === cx && b.y === cy && !b.slide);
+    if (inp.bomb && np.hand && under) {
+      const [tx, ty] = throwTarget(np.face, cx, cy);
+      if (passable({ tiles: st.tiles, bombs }, tx, ty)) {
+        bombs = bombs.map((b) => (b === under ? { ...b, x: tx, y: ty } : b));
+        events.push('throw');
+      }
     }
     const own = bombs.filter((b) => b.owner === p.seat).length;
-    if (inp.bomb && own < np.bombs && !hasBomb(bombs, cx, cy)) {
+    if (inp.bomb && !under && own < np.bombs && !hasBomb(bombs, cx, cy)) {
       bombs = [
         ...bombs,
         { x: cx, y: cy, fuse: FUSE, range: np.range, owner: p.seat, slide: null, t: 0 },
@@ -834,6 +877,7 @@ type PlayerWire = MoverWire & {
   q: number;
   k: 0 | 1;
   h: 0 | 1;
+  w: 0 | 1;
   g: number;
 };
 type BombWire = { x: number; y: number; u: number; r: number; o: number; s: number; t: number };
@@ -911,6 +955,7 @@ export function toSnapshot(
       q: p.kills,
       k: p.kick ? 1 : 0,
       h: p.shield ? 1 : 0,
+      w: p.hand ? 1 : 0,
       g: r3(p.guard),
     })),
     o: s.mobs.map(moverOut),
@@ -955,6 +1000,7 @@ export function applySnapshot(snap: Snapshot, prev: State | null = null): State 
       kills: p.q,
       kick: p.k === 1,
       shield: p.h === 1,
+      hand: p.w === 1,
       guard: p.g,
     })),
     mobs: snap.o.map(moverIn),

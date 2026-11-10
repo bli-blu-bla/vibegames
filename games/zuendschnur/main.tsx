@@ -387,7 +387,7 @@ function scoreOf(s: State, seat: number, online: boolean, local2: boolean) {
 }
 
 function statsOf(p: State['players'][number] | undefined) {
-  const extras = `${p?.kick ? ' · Kick' : ''}${p?.shield ? ' · Schild' : ''}`;
+  const extras = `${p?.kick ? ' · Kick' : ''}${p?.shield ? ' · Schild' : ''}${p?.hand ? ' · Hand' : ''}`;
   return `Bomben ${p?.bombs ?? 0} · Reichweite ${p?.range ?? 0}${extras}`;
 }
 
@@ -642,6 +642,18 @@ function drawItem(ctx: CanvasRenderingContext2D, item: Item, px: number, py: num
     ctx.quadraticCurveTo(cx + 6, cy + 4, cx, cy + 8);
     ctx.quadraticCurveTo(cx - 6, cy + 4, cx - 7, cy - 5);
     ctx.closePath();
+    ctx.stroke();
+  } else if (item === 'hand') {
+    // Hand: Bomben werfen. Handfläche mit drei Fingern und Daumen
+    ctx.lineWidth = 2.5;
+    ctx.roundRect(cx - 5, cy - 1, 10, 9, 3);
+    ctx.fill();
+    for (const fx of [-3.5, 0, 3.5]) {
+      ctx.moveTo(fx + cx, cy);
+      ctx.lineTo(fx + cx, cy - 7);
+    }
+    ctx.moveTo(cx - 5, cy + 3);
+    ctx.lineTo(cx - 8, cy - 1);
     ctx.stroke();
   } else {
     // Doppelpfeil: schneller

@@ -10,7 +10,9 @@ import {
   FLOOR,
   FUSE,
   GUARD_TIME,
+  ITEM_WEIGHTS,
   isOver,
+  itemFor,
   LEVELS,
   type Level,
   mobCount,
@@ -33,6 +35,7 @@ import {
   SPAWNS,
   type State,
   sideOf,
+  THROW_DIST,
   tileAt,
   toSnapshot,
   update,
@@ -333,6 +336,79 @@ describe('Extras: Kick und Schild', () => {
   });
 });
 
+describe('Extra: Hand', () => {
+  const withHand = (s: State, x = 1, y = 1, face: 'up' | 'down' | 'left' | 'right' = 'right') => ({
+    ...s,
+    players: s.players.map((p) => ({ ...p, x, y, face, hand: true })),
+  });
+
+  it('sammelt die Hand ein, sie bleibt für die nächste Stufe', () => {
+    const s = empty(createState(rng()));
+    const loot = `${s.loot.slice(0, COLS + 2)}w${s.loot.slice(COLS + 3)}`;
+    const st = run({ ...s, loot }, [{ dir: 'right', bomb: false }], 0.2);
+    expect(st.players[0]?.hand).toBe(true);
+    expect(nextStage(st, rng()).players[0]?.hand).toBe(true);
+  });
+
+  it('zweimal drücken: Bombe legen und über eine Wand werfen', () => {
+    // Rechts neben (1, 3) wird eine Wand gesetzt, die Bombe landet dahinter
+    const s = withHand(empty(createState(rng())), 1, 3, 'right');
+    expect(tileAt(s, 2, 3)).toBe(FLOOR);
+    const wall = {
+      ...s,
+      tiles: s.tiles.slice(0, 3 * COLS + 2) + WALL + s.tiles.slice(3 * COLS + 3),
+    };
+    let st = update(wall, [{ dir: null, bomb: true }], 0.01, rng());
+    expect(st.bombs[0]).toMatchObject({ x: 1, y: 3 });
+    st = update(st, [{ dir: null, bomb: true }], 0.01, rng());
+    expect(st.bombs[0]).toMatchObject({ x: 1 + THROW_DIST, y: 3 });
+    expect(st.events).toContain('throw');
+  });
+
+  it('über eine Kiste geht es auch, ist das Ziel blockiert, bleibt die Bombe liegen', () => {
+    const base = empty(createState(rng()));
+    const box = withHand(
+      { ...base, tiles: base.tiles.slice(0, COLS + 2) + BOX + base.tiles.slice(COLS + 3) },
+      1,
+      1,
+      'right',
+    );
+    const placed = {
+      ...box,
+      bombs: [{ x: 1, y: 1, fuse: 9, range: 1, owner: 0, slide: null, t: 0 }],
+    };
+    expect(update(placed, [{ dir: null, bomb: true }], 0.01, rng()).bombs[0]).toMatchObject({
+      x: 3,
+      y: 1,
+    });
+    // Nach oben liegt der Rand: das Ziel wäre außerhalb, die Bombe bleibt liegen
+    const up = { ...placed, players: placed.players.map((p) => ({ ...p, face: 'up' as const })) };
+    const st = update(up, [{ dir: null, bomb: true }], 0.01, rng());
+    expect(st.bombs[0]).toMatchObject({ x: 1, y: 1 });
+    expect(st.events).not.toContain('throw');
+  });
+
+  it('ohne Hand bleibt die Bombe liegen', () => {
+    const s = empty(createState(rng()));
+    let st = update(s, [{ dir: null, bomb: true }], 0.01, rng());
+    st = update(st, [{ dir: null, bomb: true }], 0.01, rng());
+    expect(st.bombs[0]).toMatchObject({ x: 1, y: 1 });
+  });
+
+  it('die Hand ist das seltenste Extra', () => {
+    const counts: Record<string, number> = {};
+    for (let i = 0; i < 1000; i++) {
+      const item = itemFor(i / 1000);
+      counts[item] = (counts[item] ?? 0) + 1;
+    }
+    const hand = counts.hand ?? 0;
+    expect(hand).toBeGreaterThan(0);
+    for (const item of Object.keys(ITEM_WEIGHTS)) {
+      if (item !== 'hand') expect(counts[item] ?? 0).toBeGreaterThan(hand * 2);
+    }
+  });
+});
+
 describe('Online', () => {
   it('Snapshot ist JSON und klein, der Gast bekommt denselben Zustand', () => {
     const s = createState(rng(), 'versus', 4);
@@ -358,6 +434,7 @@ describe('Online', () => {
         t: 0.25,
         kick: true,
         shield: true,
+        hand: true,
         kills: 2,
       })),
       bombs: [{ x: 3, y: 1, fuse: 1.25, range: 2, owner: 0, slide: 'down', t: 0.5 }],
