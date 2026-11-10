@@ -4,6 +4,7 @@
   "category": "denken",
   "score": { "label": "HIGHSCORE", "better": "higher", "format": "points" },
   "controls": "Weiche antippen oder Tasten 1 bis 9, Zug antippen bremst, Kuh antippen vertreibt",
+  "info": ["Tipp: Handy quer halten, dann wird das Stellwerk größer."],
   "credits": [],
   "multiplayer": "coop"
 }

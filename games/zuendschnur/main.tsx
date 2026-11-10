@@ -380,11 +380,6 @@ export default function Zuendschnur({ api, paused }: GameProps) {
       >
         <Bomb size={20} weight="bold" /> Bombe
       </button>
-      {local2 && (
-        <p className="t-small muted">
-          Spieler 1: WASD und Leertaste · Spieler 2: Pfeiltasten und Enter
-        </p>
-      )}
     </div>
   );
 }
