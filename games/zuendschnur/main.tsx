@@ -112,6 +112,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   const sentInput = useRef({ dir: null as Dir | null, at: 0 });
   const outbox = useRef<GameEvent[]>([]);
   const sinceSnap = useRef(0);
+  const lastSent = useRef<State | null>(null);
   const reported = useRef(false);
 
   const colors = useColors();
@@ -215,7 +216,7 @@ export default function Zuendschnur({ api, paused }: GameProps) {
   });
 
   useNet<Snapshot>(net, 'snap', (snap) => {
-    if (guest) apply(applySnapshot(snap));
+    if (guest) apply(applySnapshot(snap, state.current));
   });
 
   // ---------- Ablauf ----------
@@ -271,7 +272,8 @@ export default function Zuendschnur({ api, paused }: GameProps) {
         sinceSnap.current += dt;
         if (sinceSnap.current >= 1 / SNAPSHOT_HZ || next.over) {
           sinceSnap.current = 0;
-          net.send('snap', toSnapshot(state.current, outbox.current));
+          net.send('snap', toSnapshot(state.current, outbox.current, lastSent.current));
+          lastSent.current = state.current;
           outbox.current = [];
         }
       }

@@ -332,11 +332,48 @@ describe('Online', () => {
     const s = createState(rng(), 'versus', 4);
     const snap = toSnapshot(s, ['boom']);
     const text = JSON.stringify(snap);
-    expect(text.length).toBeLessThan(2500);
+    expect(text.length).toBeLessThan(900);
     const back = applySnapshot(JSON.parse(text));
     expect(back.tiles).toBe(s.tiles);
     expect(back.players).toEqual(s.players);
     expect(back.events).toEqual(['boom']);
+  });
+
+  it('Snapshot trägt Bomben, Flammen, Monster und Richtungen verlustfrei', () => {
+    const solo = createState(rng(), 'solo', 1);
+    const s: State = {
+      ...solo,
+      score: 120,
+      clearIn: 1.5,
+      players: solo.players.map((p) => ({
+        ...p,
+        dir: 'left' as const,
+        face: 'up' as const,
+        t: 0.25,
+        kick: true,
+        shield: true,
+        kills: 2,
+      })),
+      bombs: [{ x: 3, y: 1, fuse: 1.25, range: 2, owner: 0, slide: 'down', t: 0.5 }],
+      flames: [{ x: 1, y: 1, ttl: 0.2, owner: 0 }],
+    };
+    const back = applySnapshot(JSON.parse(JSON.stringify(toSnapshot(s, []))));
+    expect(back).toEqual({ ...s, events: [] });
+  });
+
+  it('Snapshot schickt das Feld nur bei Änderung', () => {
+    const s = createState(rng(), 'versus', 2);
+    const full = toSnapshot(s, [], null);
+    const same = toSnapshot(s, [], s);
+    expect(full.g).toBeDefined();
+    expect(same.g).toBeUndefined();
+    expect(JSON.stringify(same).length).toBeLessThan(JSON.stringify(full).length / 2);
+    expect(applySnapshot(same, s).tiles).toBe(s.tiles);
+    const changed = {
+      ...s,
+      tiles: `${s.tiles.slice(0, 20)}${s.tiles[20] === 'X' ? 'Y' : 'X'}${s.tiles.slice(21)}`,
+    };
+    expect(toSnapshot(changed, [], s).g?.[0]).toBe(changed.tiles);
   });
 
   it('predict bewegt nur weiter, ohne über das Feld hinaus', () => {

@@ -761,17 +761,146 @@ export const isOver = (s: State) => s.over;
 
 // ---------- Online ----------
 
-/** Was der Host 20-mal pro Sekunde schickt: der ganze Zustand, er ist klein (Felder als Text). */
-export type Snapshot = Omit<State, 'level'> & { levelIndex: number };
+// Kurze Feldnamen und Zahlen statt Text: Der Snapshot geht 20-mal pro Sekunde raus.
+// Das Feld (`g`: tiles + loot) steht nur im Snapshot, wenn es sich seit dem letzten geändert hat.
+type MoverWire = { x: number; y: number; d: number; t: number; v: number; f: number };
+type PlayerWire = MoverWire & {
+  s: number;
+  a: 0 | 1;
+  b: number;
+  r: number;
+  q: number;
+  k: 0 | 1;
+  h: 0 | 1;
+  g: number;
+};
+type BombWire = { x: number; y: number; u: number; r: number; o: number; s: number; t: number };
+type FlameWire = { x: number; y: number; t: number; o: number };
 
-export function toSnapshot(s: State, events: GameEvent[]): Snapshot {
-  const { level, ...rest } = s;
-  return { ...rest, levelIndex: LEVELS.indexOf(level), events };
+export interface Snapshot {
+  /** Modus: 1 = Duell */
+  m: 0 | 1;
+  /** Index des Levels */
+  l: number;
+  /** Stufe */
+  n: number;
+  /** Feld [tiles, loot], nur bei Änderung */
+  g?: [string, string];
+  p: PlayerWire[];
+  o: MoverWire[];
+  b: BombWire[];
+  f: FlameWire[];
+  /** Score */
+  c: number;
+  /** clearIn, -1 = keiner */
+  w: number;
+  /** Ende */
+  e: 0 | 1;
+  /** Sieger, -1 = keiner */
+  v: number;
+  /** Ereignisse */
+  ev: GameEvent[];
 }
 
-export function applySnapshot(snap: Snapshot): State {
-  const { levelIndex, ...rest } = snap;
-  return { ...rest, level: LEVELS[levelIndex] ?? (LEVELS[DEFAULT_LEVEL] as Level) };
+/** 0 = keine Richtung, sonst 1 bis 4 */
+const dirCode = (d: Dir | null) => (d ? DIRS.indexOf(d) + 1 : 0);
+const dirOf = (c: number): Dir | null => DIRS[c - 1] ?? null;
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
+const moverOut = (m: Mover): MoverWire => ({
+  x: m.x,
+  y: m.y,
+  d: dirCode(m.dir),
+  t: r3(m.t),
+  v: r3(m.speed),
+  f: dirCode(m.face),
+});
+const moverIn = (m: MoverWire): Mover => ({
+  x: m.x,
+  y: m.y,
+  dir: dirOf(m.d),
+  t: m.t,
+  speed: m.v,
+  face: dirOf(m.f) ?? 'down',
+});
+
+/**
+ * `sent`: der zuletzt geschickte Zustand. Hat sich das Feld seitdem nicht geändert, bleibt es weg.
+ * Der erste Snapshot (`sent` = null) enthält es immer.
+ */
+export function toSnapshot(s: State, events: GameEvent[], sent: State | null = null): Snapshot {
+  const snap: Snapshot = {
+    m: s.mode === 'versus' ? 1 : 0,
+    l: LEVELS.indexOf(s.level),
+    n: s.stage,
+    p: s.players.map((p) => ({
+      ...moverOut(p),
+      s: p.seat,
+      a: p.alive ? 1 : 0,
+      b: p.bombs,
+      r: p.range,
+      q: p.kills,
+      k: p.kick ? 1 : 0,
+      h: p.shield ? 1 : 0,
+      g: r3(p.guard),
+    })),
+    o: s.mobs.map(moverOut),
+    b: s.bombs.map((b) => ({
+      x: b.x,
+      y: b.y,
+      u: r3(b.fuse),
+      r: b.range,
+      o: b.owner,
+      s: dirCode(b.slide),
+      t: r3(b.t),
+    })),
+    f: s.flames.map((f) => ({ x: f.x, y: f.y, t: r3(f.ttl), o: f.owner })),
+    c: s.score,
+    w: s.clearIn ?? -1,
+    e: s.over ? 1 : 0,
+    v: s.winner ?? -1,
+    ev: events,
+  };
+  if (!sent || sent.tiles !== s.tiles || sent.loot !== s.loot) snap.g = [s.tiles, s.loot];
+  return snap;
+}
+
+/** `prev`: der bisherige Zustand des Gasts, von dem das Feld übernommen wird, wenn es fehlt. */
+export function applySnapshot(snap: Snapshot, prev: State | null = null): State {
+  return {
+    mode: snap.m === 1 ? 'versus' : 'solo',
+    level: LEVELS[snap.l] ?? (LEVELS[DEFAULT_LEVEL] as Level),
+    stage: snap.n,
+    tiles: snap.g?.[0] ?? prev?.tiles ?? '',
+    loot: snap.g?.[1] ?? prev?.loot ?? '',
+    players: snap.p.map((p) => ({
+      ...moverIn(p),
+      seat: p.s,
+      alive: p.a === 1,
+      bombs: p.b,
+      range: p.r,
+      kills: p.q,
+      kick: p.k === 1,
+      shield: p.h === 1,
+      guard: p.g,
+    })),
+    mobs: snap.o.map(moverIn),
+    bombs: snap.b.map((b) => ({
+      x: b.x,
+      y: b.y,
+      fuse: b.u,
+      range: b.r,
+      owner: b.o,
+      slide: dirOf(b.s),
+      t: b.t,
+    })),
+    flames: snap.f.map((f) => ({ x: f.x, y: f.y, ttl: f.t, owner: f.o })),
+    score: snap.c,
+    clearIn: snap.w < 0 ? null : snap.w,
+    over: snap.e === 1,
+    winner: snap.v < 0 ? null : snap.v,
+    events: snap.ev,
+  };
 }
 
 /** Gast zwischen zwei Snapshots: nur weiterbewegen und Zeit laufen lassen, ohne Zufall und Punkte. */
