@@ -13,6 +13,13 @@
   -webkit-touch-callout: none;
 }
 
+.mnf-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
 .mnf-difficulties {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -148,4 +155,27 @@
 
 .mnf-cell:disabled {
   cursor: default;
+}
+
+/* Desktop: größeres Feld, Modus links und Schwierigkeit rechts in einer Zeile */
+@media (min-width: 720px) {
+  .mnf {
+    width: min(100%, 640px);
+    padding: var(--space-5);
+  }
+
+  .mnf-top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mnf-modes,
+  .mnf-difficulties {
+    width: auto;
+  }
+
+  .mnf-top .btn {
+    padding: 0 var(--space-4);
+  }
 }

@@ -190,19 +190,43 @@ export default function Game({ api, paused }: GameProps) {
 
   return (
     <div className="mnf">
-      <div className="mnf-difficulties">
-        {DIFFICULTY_LIST.map((item) => (
+      <div className="mnf-top">
+        <div className="mnf-modes">
           <button
-            key={item.id}
             type="button"
-            className={`btn mnf-diff-btn${state.difficulty === item.id ? ' mnf-diff-active' : ''}`}
-            aria-pressed={state.difficulty === item.id}
+            className={`btn mnf-mode-btn${state.mode === 'dig' ? ' btn-primary' : ''}`}
+            aria-pressed={state.mode === 'dig'}
             disabled={!playing}
-            onClick={() => applyDifficulty(item.id)}
+            onClick={() => applySetMode('dig')}
           >
-            {item.label}
+            <Shovel size={18} weight="fill" aria-hidden="true" />
+            <span>Graben</span>
           </button>
-        ))}
+          <button
+            type="button"
+            className={`btn mnf-mode-btn${state.mode === 'flag' ? ' btn-primary' : ''}`}
+            aria-pressed={state.mode === 'flag'}
+            disabled={!playing}
+            onClick={() => applySetMode('flag')}
+          >
+            <Flag size={18} weight="fill" aria-hidden="true" />
+            <span>Flagge</span>
+          </button>
+        </div>
+        <div className="mnf-difficulties">
+          {DIFFICULTY_LIST.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`btn mnf-diff-btn${state.difficulty === item.id ? ' mnf-diff-active' : ''}`}
+              aria-pressed={state.difficulty === item.id}
+              disabled={!playing}
+              onClick={() => applyDifficulty(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="mnf-bar">
@@ -213,29 +237,6 @@ export default function Game({ api, paused }: GameProps) {
         <div className="mnf-stat" aria-live="polite">
           <span className="t-mono-small muted">{state.seconds} s</span>
         </div>
-      </div>
-
-      <div className="mnf-modes">
-        <button
-          type="button"
-          className={`btn mnf-mode-btn${state.mode === 'dig' ? ' btn-primary' : ''}`}
-          aria-pressed={state.mode === 'dig'}
-          disabled={!playing}
-          onClick={() => applySetMode('dig')}
-        >
-          <Shovel size={18} weight="fill" aria-hidden="true" />
-          <span>Graben</span>
-        </button>
-        <button
-          type="button"
-          className={`btn mnf-mode-btn${state.mode === 'flag' ? ' btn-primary' : ''}`}
-          aria-pressed={state.mode === 'flag'}
-          disabled={!playing}
-          onClick={() => applySetMode('flag')}
-        >
-          <Flag size={18} weight="fill" aria-hidden="true" />
-          <span>Flagge</span>
-        </button>
       </div>
 
       <div
