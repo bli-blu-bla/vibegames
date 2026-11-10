@@ -374,15 +374,19 @@ function scoreOf(s: State, seat: number, online: boolean, local2: boolean) {
   return local2 ? 0 : s.score;
 }
 
+function statsOf(p: State['players'][number] | undefined) {
+  const extras = `${p?.kick ? ' · Kick' : ''}${p?.shield ? ' · Schild' : ''}`;
+  return `Bomben ${p?.bombs ?? 0} · Reichweite ${p?.range ?? 0}${extras}`;
+}
+
 function hudText(s: State, seat: number, online: boolean) {
   if (s.mode === 'solo') {
-    const p = s.players[0];
-    const extras = `${p?.kick ? ' · Kick' : ''}${p?.shield ? ' · Schild' : ''}`;
-    return `${s.level.name} · Stufe ${s.stage} · Monster ${s.mobs.length} · Bomben ${p?.bombs ?? 0} · Reichweite ${p?.range ?? 0}${extras}`;
+    return `${s.level.name} · Stufe ${s.stage} · Monster ${s.mobs.length} · ${statsOf(s.players[0])}`;
   }
   const alive = s.players.filter((p) => p.alive).length;
-  const me = online ? ` · Du bist Spieler ${seat + 1}` : '';
-  return `Duell · ${alive} von ${s.players.length} übrig${me}`;
+  const head = `Duell · ${alive} von ${s.players.length} übrig`;
+  if (online) return `${head} · Du bist Spieler ${seat + 1} · ${statsOf(s.players[seat])}`;
+  return `${head} · ${s.players.map((p, i) => `S${i + 1}: ${statsOf(p)}`).join(' | ')}`;
 }
 
 function resultOf(s: State, seat: number, online: boolean) {
