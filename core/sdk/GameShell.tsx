@@ -172,18 +172,37 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
           )}
         </div>
         <div className="shell-group shell-stats">
-          <div className="shell-stat">
-            <span className="t-label muted">SCORE</span>
-            <span className="t-score shell-score" data-testid="score">
-              {fmt(score)}
-            </span>
-          </div>
-          <div className="shell-stat">
-            <span className="t-label muted">{meta.score.label}</span>
-            <span className="t-score shell-score score-value">
-              {best === null ? '–' : fmt(best)}
-            </span>
-          </div>
+          {online && versus ? (
+            <>
+              <div className="shell-stat">
+                <span className="t-label muted">SIEGE</span>
+                <span className="t-score shell-score" data-testid="wins">
+                  {tally.win}
+                </span>
+              </div>
+              <div className="shell-stat">
+                <span className="t-label muted">NIEDERLAGEN</span>
+                <span className="t-score shell-score" data-testid="losses">
+                  {tally.lose}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="shell-stat">
+                <span className="t-label muted">SCORE</span>
+                <span className="t-score shell-score" data-testid="score">
+                  {fmt(score)}
+                </span>
+              </div>
+              <div className="shell-stat">
+                <span className="t-label muted">{meta.score.label}</span>
+                <span className="t-score shell-score score-value">
+                  {best === null ? '–' : fmt(best)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
         <div className="shell-group shell-settings">
           {meta.multiplayer &&
@@ -303,7 +322,7 @@ export function GameShell({ meta, game: Game, room = null, localNet = false }: P
             )}
           </AnimatePresence>
         </div>
-        {online && ready && <NetCorner pings={net?.pings ?? {}} tally={versus ? tally : null} />}
+        {online && ready && <NetCorner pings={net?.pings ?? {}} />}
         <p className="t-mono-small muted">{meta.controls} · P Pause · R Neustart</p>
         {meta.multiplayer && !online && (
           <p className="t-small muted shell-hint">
@@ -333,19 +352,13 @@ function addOutcome(t: Tally, outcome: 'win' | 'lose' | 'draw'): Tally {
   return { ...t, [outcome]: t[outcome] + 1 };
 }
 
-/** Ecke unten rechts: Ping zu den Mitspielern und bei `versus` die Bilanz */
-function NetCorner({ pings, tally }: { pings: Record<number, number>; tally: Tally | null }) {
+/** Ecke unten rechts: Ping zu den Mitspielern */
+function NetCorner({ pings }: { pings: Record<number, number> }) {
   const seats = Object.keys(pings)
     .map(Number)
     .sort((a, b) => a - b);
   return (
     <output className="t-mono-small muted shell-corner" data-testid="net-corner">
-      {tally && (
-        <span>
-          {tally.win} Siege · {tally.lose} Niederlagen
-          {tally.draw > 0 ? ` · ${tally.draw} Remis` : ''}
-        </span>
-      )}
       {seats.map((seat) => (
         <span key={seat}>
           {seat === 0 ? 'Host' : `Spieler ${seat + 1}`} {pings[seat]} ms
