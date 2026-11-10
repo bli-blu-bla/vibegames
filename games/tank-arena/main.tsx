@@ -237,18 +237,9 @@ export default function TankArena({ api, paused }: GameProps) {
 
   return (
     <div className="ta-root">
-      <div ref={fieldRef} className="ta-field">
-        <canvas
-          {...canvas.props}
-          role="img"
-          aria-label={`Tank Arena: Runde ${state.current.round}, ${state.current.lives} Leben`}
-        />
-      </div>
-
       <div className="ta-bar">
         {!net ? (
-          <fieldset className="ta-levels">
-            <legend className="t-label muted">SCHWIERIGKEIT</legend>
+          <fieldset className="ta-levels ta-levels-end" aria-label="Schwierigkeit">
             {LEVELS.map((l, i) => (
               <button
                 key={l.name}
@@ -263,8 +254,7 @@ export default function TankArena({ api, paused }: GameProps) {
             ))}
           </fieldset>
         ) : (
-          <fieldset className="ta-levels">
-            <legend className="t-label muted">MODUS</legend>
+          <fieldset className="ta-levels" aria-label="Modus">
             <button
               type="button"
               className={onlineMode === 'coop' ? 'btn btn-primary' : 'btn'}
@@ -285,34 +275,43 @@ export default function TankArena({ api, paused }: GameProps) {
             </button>
           </fieldset>
         )}
-
-        <button
-          type="button"
-          className="btn btn-primary ta-fire-btn"
-          disabled={paused}
-          aria-label="Schießen"
-          onPointerDown={() => {
-            touchFire.current = true;
-            tapFire.current = true;
-            markStarted();
-          }}
-          onPointerUp={() => {
-            touchFire.current = false;
-          }}
-          onPointerCancel={() => {
-            touchFire.current = false;
-          }}
-          onPointerLeave={() => {
-            touchFire.current = false;
-          }}
-          onClick={() => {
-            tapFire.current = true;
-            markStarted();
-          }}
-        >
-          <Crosshair size={20} weight="bold" aria-hidden /> Feuer
-        </button>
       </div>
+
+      <div ref={fieldRef} className="ta-field">
+        <canvas
+          {...canvas.props}
+          style={{ ...canvas.props.style, maxWidth: 'none' }}
+          role="img"
+          aria-label={`Tank Arena: Runde ${state.current.round}, ${state.current.lives} Leben`}
+        />
+      </div>
+
+      <button
+        type="button"
+        className="btn btn-primary ta-fire-btn"
+        disabled={paused}
+        aria-label="Schießen"
+        onPointerDown={() => {
+          touchFire.current = true;
+          tapFire.current = true;
+          markStarted();
+        }}
+        onPointerUp={() => {
+          touchFire.current = false;
+        }}
+        onPointerCancel={() => {
+          touchFire.current = false;
+        }}
+        onPointerLeave={() => {
+          touchFire.current = false;
+        }}
+        onClick={() => {
+          tapFire.current = true;
+          markStarted();
+        }}
+      >
+        <Crosshair size={20} weight="bold" aria-hidden /> Feuer
+      </button>
     </div>
   );
 }

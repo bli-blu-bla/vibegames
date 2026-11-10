@@ -1,5 +1,6 @@
 .ta-root {
   width: 100%;
+  max-width: 720px; /* Desktop: Spielfeld größer als mobil */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -17,7 +18,6 @@
 
 .ta-bar {
   width: 100%;
-  max-width: 480px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -35,14 +35,18 @@
   padding: 0;
 }
 
-.ta-levels legend {
-  float: left;
-  margin-right: var(--space-2);
-  line-height: 44px;
+/* Schwierigkeit steht rechts, auch wenn links kein Modus ist */
+.ta-levels-end {
+  margin-left: auto;
 }
 
 .ta-fire-btn {
   min-width: 112px;
   touch-action: manipulation;
   user-select: none;
+}
+
+/* Die Arena-Wand im Canvas ist der Rahmen, kein zweiter Rand drumherum */
+.ta-field .game-canvas {
+  border: 0;
 }
