@@ -30,15 +30,54 @@ export interface Level {
   enemySpeed: number;
   enemyFireInterval: number;
   enemyBulletSpeed: number;
+  /** Gewichte der Angriffsstrategien [Angriff, Flanke, Abstand] */
+  planWeights: readonly [number, number, number];
+  /** Wie lange ein Gegner bei einer Strategie bleibt (min, max in Sekunden) */
+  planTime: readonly [number, number];
+  /** Ab so vielen Zellen Wegersparnis schießt ein Gegner Mauern frei (999 = nie) */
+  breachSaving: number;
 }
 
 export const LEVELS: readonly Level[] = [
-  { name: 'Leicht', enemySpeed: 46, enemyFireInterval: 2.1, enemyBulletSpeed: 150 },
-  { name: 'Mittel', enemySpeed: 68, enemyFireInterval: 1.45, enemyBulletSpeed: 190 },
-  { name: 'Schwer', enemySpeed: 92, enemyFireInterval: 0.95, enemyBulletSpeed: 230 },
+  {
+    name: 'Leicht',
+    enemySpeed: 46,
+    enemyFireInterval: 2.1,
+    enemyBulletSpeed: 150,
+    planWeights: [0.6, 0.1, 0.3],
+    planTime: [7, 11],
+    breachSaving: 999,
+  },
+  {
+    name: 'Mittel',
+    enemySpeed: 68,
+    enemyFireInterval: 1.45,
+    enemyBulletSpeed: 190,
+    planWeights: [0.35, 0.4, 0.25],
+    planTime: [5, 8],
+    breachSaving: 14,
+  },
+  {
+    name: 'Schwer',
+    enemySpeed: 92,
+    enemyFireInterval: 0.95,
+    enemyBulletSpeed: 230,
+    planWeights: [0.25, 0.55, 0.2],
+    planTime: [3.5, 6],
+    breachSaving: 6,
+  },
 ];
 
 export const DEFAULT_LEVEL = 1;
+
+// Gegner-KI: bevorzugter Abstand, Reichweite, Reaktionszeit und Zielungenauigkeit (rad)
+const ENEMY_NEAR_DIST = 110;
+const ENEMY_FAR_DIST = 200;
+const ENEMY_FIRE_RANGE = 280;
+const ENEMY_REACTION = 0.35;
+const ENEMY_AIM_TOLERANCE = 0.12; // erlaubte Abweichung der Ausrichtung beim Schuss (rad)
+const ENEMY_AIM_TIME = 0.5; // so kurz vor dem Schuss richtet sich der Gegner aus
+const ENEMY_TURN_RATE = 4; // rad/s
 
 export interface Point {
   x: number;
@@ -98,8 +137,12 @@ export interface EnemyTank {
   y: number;
   angle: number;
   cooldown: number;
+  /** Restzeit bis zum nächsten Strategiewechsel */
   aiTimer: number;
+  /** Seite (+1/-1) für Bögen und Flankenseite */
   strafe: number;
+  /** Strategie: 0 Angriff, 1 Flanke, 2 Abstand halten */
+  plan: number;
 }
 
 export type GameEvent =
@@ -259,8 +302,9 @@ export function generateArena(
         y: sy,
         angle: Math.PI,
         cooldown: level.enemyFireInterval * (0.6 + i * 0.25),
-        aiTimer: 0.4 + i * 0.3,
+        aiTimer: level.planTime[0] * (0.5 + rng.next() * 0.5),
         strafe: i % 2 === 0 ? 1 : -1,
+        plan: pickPlan(level, rng, enemies),
       });
     }
   }
@@ -336,6 +380,190 @@ function circleHitsAnyObstacle(
 
 function clampArena(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+// ---------- Gegner-KI: Strategien und Wegfindung ----------
+
+const PLAN_RUSH = 0;
+const PLAN_FLANK = 1;
+const PLAN_HOLD = 2;
+const FLANK_DIST = 150;
+const BREACH_RANGE = 90; // so nah muss eine Mauer sein, damit der Gegner sie freischießt
+const FLANK_ARRIVED = 36;
+const CELL = 12;
+const COLS = Math.ceil(WIDTH / CELL);
+const ROWS = Math.ceil(HEIGHT / CELL);
+
+/** Wählt eine Strategie nach Schwierigkeit; von anderen Gegnern gewählte werden seltener genommen. */
+function pickPlan(level: Level, rng: Rng, others: readonly EnemyTank[]): number {
+  const weights = level.planWeights.map((w, plan) => {
+    const used = others.filter((o) => o.plan === plan).length;
+    return w / (1 + used * 1.5);
+  });
+  let roll = rng.next() * weights.reduce((a, b) => a + b, 0);
+  for (let plan = 0; plan < weights.length; plan++) {
+    roll -= weights[plan] as number;
+    if (roll <= 0) return plan;
+  }
+  return PLAN_RUSH;
+}
+
+function buildBlockedGrid(
+  obstacles: readonly Obstacle[],
+  barrels: readonly Barrel[],
+  ignoreBricks = false,
+): boolean[] {
+  const solid = ignoreBricks ? obstacles.filter((o) => !o.destructible) : obstacles;
+  const grid: boolean[] = new Array(COLS * ROWS).fill(false);
+  const r = TANK_RADIUS + 2;
+  for (let cy = 0; cy < ROWS; cy++) {
+    for (let cx = 0; cx < COLS; cx++) {
+      const x = cx * CELL + CELL / 2;
+      const y = cy * CELL + CELL / 2;
+      grid[cy * COLS + cx] =
+        x < ARENA_MARGIN + r ||
+        x > WIDTH - ARENA_MARGIN - r ||
+        y < ARENA_MARGIN + r ||
+        y > HEIGHT - ARENA_MARGIN - r ||
+        circleHitsAnyObstacle(x, y, r, solid) ||
+        barrels.some((b) => Math.hypot(x - b.x, y - b.y) < r + b.radius);
+    }
+  }
+  return grid;
+}
+
+const cellOf = (v: number, size: number) => Math.max(0, Math.min(size - 1, Math.floor(v / CELL)));
+const NEIGHBOURS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
+
+/** Entfernungsfeld (BFS) vom Zielpunkt aus; Ziel wird auf die nächste freie Zelle gelegt. */
+function distanceField(blocked: readonly boolean[], goal: Point): number[] {
+  const dist: number[] = new Array(COLS * ROWS).fill(-1);
+  const gx = cellOf(goal.x, COLS);
+  const gy = cellOf(goal.y, ROWS);
+  let start = -1;
+  for (let ring = 0; ring < 8 && start < 0; ring++) {
+    for (let dy = -ring; dy <= ring && start < 0; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const x = gx + dx;
+        const y = gy + dy;
+        if (x < 0 || y < 0 || x >= COLS || y >= ROWS || blocked[y * COLS + x]) continue;
+        start = y * COLS + x;
+        break;
+      }
+    }
+  }
+  if (start < 0) return dist;
+  dist[start] = 0;
+  const queue = [start];
+  for (let head = 0; head < queue.length; head++) {
+    const cur = queue[head] as number;
+    const cx = cur % COLS;
+    const cy = Math.floor(cur / COLS);
+    for (const [dx, dy] of NEIGHBOURS) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
+      const idx = y * COLS + x;
+      if (dist[idx] !== -1 || blocked[idx]) continue;
+      // Diagonal nur, wenn beide Nachbarzellen frei sind (keine Ecken schneiden)
+      if (dx !== 0 && dy !== 0 && (blocked[cy * COLS + x] || blocked[y * COLS + cx])) continue;
+      dist[idx] = (dist[cur] as number) + 1;
+      queue.push(idx);
+    }
+  }
+  return dist;
+}
+
+/** Nächster Wegpunkt auf dem kürzesten Weg zum Ziel des Entfernungsfelds (null: kein Weg). */
+function nextWaypoint(dist: readonly number[], from: Point): Point | null {
+  let cx = cellOf(from.x, COLS);
+  let cy = cellOf(from.y, ROWS);
+  let cur = dist[cy * COLS + cx] as number;
+  if (cur < 0) {
+    // Zelle selbst ist blockiert (Panzer streift eine Kante): beste Nachbarzelle nehmen
+    let best = -1;
+    for (const [dx, dy] of NEIGHBOURS) {
+      const x = cx + dx;
+      const y = cy + dy;
+      const d = x < 0 || y < 0 || x >= COLS || y >= ROWS ? -1 : (dist[y * COLS + x] as number);
+      if (d >= 0 && (best < 0 || d < best)) {
+        best = d;
+        cur = d + 1;
+        cx = x;
+        cy = y;
+      }
+    }
+    if (best < 0) return null;
+  }
+  for (let step = 0; step < 3 && cur > 0; step++) {
+    let bx = cx;
+    let by = cy;
+    for (const [dx, dy] of NEIGHBOURS) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
+      const d = dist[y * COLS + x] as number;
+      if (d >= 0 && d < cur) {
+        cur = d;
+        bx = x;
+        by = y;
+      }
+    }
+    if (bx === cx && by === cy) break;
+    cx = bx;
+    cy = by;
+  }
+  return { x: cx * CELL + CELL / 2, y: cy * CELL + CELL / 2 };
+}
+
+/** Weglänge in Zellen am Punkt (bei blockierter eigener Zelle beste Nachbarzelle), -1 ohne Weg. */
+function fieldValue(dist: readonly number[], p: Point): number {
+  const cx = cellOf(p.x, COLS);
+  const cy = cellOf(p.y, ROWS);
+  let best = -1;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
+      const d = dist[y * COLS + x] as number;
+      if (d >= 0 && (best < 0 || d < best)) best = d;
+    }
+  }
+  return best;
+}
+
+/** Erste zerstörbare Mauer, die auf einem Strahl liegt (vor jedem anderen Hindernis), sonst null. */
+function brickOnRay(
+  from: Point,
+  angle: number,
+  length: number,
+  obstacles: readonly Obstacle[],
+): Obstacle | null {
+  for (let d = TANK_RADIUS; d <= length; d += 6) {
+    const x = from.x + Math.cos(angle) * d;
+    const y = from.y + Math.sin(angle) * d;
+    const hit = obstacles.find((o) => x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h);
+    if (hit) return hit.destructible ? hit : null;
+  }
+  return null;
+}
+
+/** Zielpunkt je Strategie: Flanke = seitlich/hinter dem Spieler, sonst der Spieler selbst. */
+function planGoal(enemy: EnemyTank, target: PlayerTank): Point {
+  if (enemy.plan !== PLAN_FLANK) return target;
+  const a = target.angle + Math.PI * 0.6 * enemy.strafe;
+  return { x: target.x + Math.cos(a) * FLANK_DIST, y: target.y + Math.sin(a) * FLANK_DIST };
 }
 
 function moveTankWithCollisions(
@@ -476,6 +704,33 @@ export function resolveExplosions(
   };
 }
 
+/** Kleinster vorzeichenbehafteter Winkelunterschied von b nach a. */
+function angleDiff(a: number, b: number): number {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
+}
+
+/** Freie Schusslinie: keine Wand und kein Fass zwischen den beiden Punkten. */
+function hasLineOfSight(
+  from: Point,
+  to: Point,
+  obstacles: readonly Obstacle[],
+  barrels: readonly Barrel[],
+): boolean {
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(dist / 8));
+  for (let i = 1; i < steps; i++) {
+    const x = from.x + ((to.x - from.x) * i) / steps;
+    const y = from.y + ((to.y - from.y) * i) / steps;
+    for (const o of obstacles) {
+      if (x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h) return false;
+    }
+    for (const b of barrels) {
+      if (Math.hypot(x - b.x, y - b.y) <= b.radius) return false;
+    }
+  }
+  return true;
+}
+
 // ---------- Haupt-Update ----------
 
 export function update(state: State, input: Input, dt: number, rng: Rng): State {
@@ -548,6 +803,8 @@ export function update(state: State, input: Input, dt: number, rng: Rng): State 
 
   // 2. Computergegner bewegen sich selbstständig, suchen Spieler und schießen
   const livingPlayers = players.filter((p) => p.lives > 0);
+  const blocked = buildBlockedGrid(obstacles, barrels);
+  const blockedOpen = buildBlockedGrid(obstacles, barrels, true);
   enemies = enemies.map((enemy) => {
     const target =
       livingPlayers.reduce<PlayerTank | null>((best, cand) => {
@@ -562,44 +819,119 @@ export function update(state: State, input: Input, dt: number, rng: Rng): State 
 
     let aiTimer = enemy.aiTimer - dt;
     let strafe = enemy.strafe;
+    let plan = enemy.plan;
     if (aiTimer <= 0) {
-      aiTimer = 0.8 + rng.next() * 0.9;
+      // Strategiewechsel, verteilt auf die Gegner
+      const others = enemies.filter((o) => o.id !== enemy.id);
+      plan = pickPlan(state.level, rng, others);
       strafe = rng.next() < 0.5 ? 1 : -1;
+      aiTimer =
+        state.level.planTime[0] + rng.next() * (state.level.planTime[1] - state.level.planTime[0]);
+    }
+    const self: EnemyTank = { ...enemy, plan, strafe };
+
+    // Sichtkontakt, Wegfindung und Zielwinkel
+    const sees =
+      !!target &&
+      target.lives > 0 &&
+      distToTarget <= ENEMY_FIRE_RANGE &&
+      hasLineOfSight(enemy, target, obstacles, barrels);
+    const goal = target ? planGoal(self, target) : enemy;
+    const flanking =
+      plan === PLAN_FLANK && Math.hypot(goal.x - enemy.x, goal.y - enemy.y) > FLANK_ARRIVED;
+    const preferred =
+      plan === PLAN_RUSH ? ENEMY_NEAR_DIST : plan === PLAN_HOLD ? ENEMY_FAR_DIST - 20 : 130;
+    let pathAngle = toPlayerAngle;
+    // Mauer-Durchbruch: Gegner schießen zerstörbare Mauern frei, wenn das den Weg stark
+    // verkürzt oder der Spieler direkt dahinter steht (nur ab Stufe Mittel)
+    let breach = false;
+    if (!(sees && !flanking) && target) {
+      const normal = distanceField(blocked, goal);
+      let field = normal;
+      if (state.level.breachSaving < 999) {
+        const open = distanceField(blockedOpen, goal);
+        const dNormal = fieldValue(normal, enemy);
+        const dOpen = fieldValue(open, enemy);
+        if (dOpen >= 0 && (dNormal < 0 || dNormal - dOpen >= state.level.breachSaving)) {
+          field = open;
+          breach = true;
+        }
+      }
+      const wp = nextWaypoint(field, enemy);
+      if (wp) pathAngle = Math.atan2(wp.y - enemy.y, wp.x - enemy.x);
+    }
+    const hiddenBehindBrick =
+      !!target &&
+      !sees &&
+      state.level.breachSaving < 999 &&
+      target.lives > 0 &&
+      distToTarget <= ENEMY_FIRE_RANGE &&
+      brickOnRay(enemy, toPlayerAngle, distToTarget, obstacles) !== null;
+    if (hiddenBehindBrick) {
+      breach = true;
+      pathAngle = toPlayerAngle;
     }
 
-    // Auf Spieler zufahren; bei geringem Abstand oder Hindernis leicht seitlich versetzen
-    const moveAngle =
-      distToTarget < 72 ? toPlayerAngle + (Math.PI / 2) * strafe : toPlayerAngle + 0.25 * strafe;
-    const stepX = Math.cos(moveAngle) * state.level.enemySpeed * dt;
-    const stepY = Math.sin(moveAngle) * state.level.enemySpeed * dt;
+    let cooldown = enemy.cooldown - dt;
 
-    let moved = moveTankWithCollisions(enemy.x, enemy.y, stepX, stepY, obstacles, barrels);
-    if (Math.hypot(moved.x - enemy.x, moved.y - enemy.y) < 0.1 * dt * state.level.enemySpeed) {
-      // Ausweichbewegung, falls ein Hindernis im Weg steht
-      const altAngle = toPlayerAngle + (Math.PI / 2) * strafe;
+    // Flankierer zielen erst, wenn sie in Position sind oder der Spieler sehr nah ist
+    const aiming =
+      sees &&
+      cooldown <= ENEMY_AIM_TIME &&
+      distToTarget >= ENEMY_NEAR_DIST &&
+      (!flanking || distToTarget < 150);
+    let desired: number;
+    if (aiming) {
+      desired = toPlayerAngle;
+    } else if (distToTarget < ENEMY_NEAR_DIST && sees) {
+      desired = toPlayerAngle + Math.PI - 0.6 * strafe;
+    } else if (sees && !flanking && distToTarget <= preferred + 40) {
+      desired = toPlayerAngle + 0.9 * strafe;
+    } else {
+      desired = pathAngle;
+    }
+
+    const diff = angleDiff(desired, enemy.angle);
+    const maxTurn = ENEMY_TURN_RATE * dt;
+    const angle = enemy.angle + Math.max(-maxTurn, Math.min(maxTurn, diff));
+    const aligned = Math.abs(angleDiff(toPlayerAngle, angle)) <= ENEMY_AIM_TOLERANCE;
+    // Steht eine zerstörbare Mauer im Weg, bleibt der Panzer stehen und schießt sie frei
+    const wallShot =
+      breach &&
+      !aiming &&
+      Math.abs(angleDiff(desired, angle)) <= ENEMY_AIM_TOLERANCE &&
+      brickOnRay(enemy, angle, BREACH_RANGE, obstacles) !== null;
+    if (!sees && !wallShot) cooldown = Math.max(cooldown, ENEMY_REACTION); // Reaktionszeit
+
+    // Beim Zielen bleibt der Panzer stehen, sonst fährt er vorwärts (je nach Drehung langsamer)
+    const turnLeft = Math.abs(angleDiff(desired, angle));
+    const speed =
+      (aiming && aligned) || wallShot ? 0 : state.level.enemySpeed * (turnLeft > 1 ? 0.4 : 1);
+    let moved = { x: enemy.x, y: enemy.y };
+    if (speed > 0) {
       moved = moveTankWithCollisions(
         enemy.x,
         enemy.y,
-        Math.cos(altAngle) * state.level.enemySpeed * dt,
-        Math.sin(altAngle) * state.level.enemySpeed * dt,
+        Math.cos(angle) * speed * dt,
+        Math.sin(angle) * speed * dt,
         obstacles,
         barrels,
       );
     }
 
-    let cooldown = enemy.cooldown - dt;
-    if (cooldown <= 0 && target && target.lives > 0) {
+    if (((sees && aligned) || wallShot) && cooldown <= 0 && target) {
       const muzzleDist = TANK_RADIUS + BULLET_RADIUS + 2;
       bullets.push({
         id: nextId++,
-        x: moved.x + Math.cos(toPlayerAngle) * muzzleDist,
-        y: moved.y + Math.sin(toPlayerAngle) * muzzleDist,
-        vx: Math.cos(toPlayerAngle) * state.level.enemyBulletSpeed,
-        vy: Math.sin(toPlayerAngle) * state.level.enemyBulletSpeed,
+        x: moved.x + Math.cos(angle) * muzzleDist,
+        y: moved.y + Math.sin(angle) * muzzleDist,
+        vx: Math.cos(angle) * state.level.enemyBulletSpeed,
+        vy: Math.sin(angle) * state.level.enemyBulletSpeed,
         ownerId: enemy.id,
         fromPlayer: false,
       });
       cooldown = state.level.enemyFireInterval * (0.85 + rng.next() * 0.3);
+      if (rng.next() < 0.5) strafe = -strafe; // nach dem Schuss die Seite wechseln
       events.push({ type: 'shoot' });
     }
 
@@ -607,10 +939,11 @@ export function update(state: State, input: Input, dt: number, rng: Rng): State 
       ...enemy,
       x: moved.x,
       y: moved.y,
-      angle: toPlayerAngle,
+      angle,
       cooldown,
       aiTimer,
       strafe,
+      plan,
     };
   });
 
@@ -816,7 +1149,16 @@ export function update(state: State, input: Input, dt: number, rng: Rng): State 
 // Kurze Feldnamen: Der Snapshot geht 20-mal pro Sekunde raus. Hindernisse und Fässer (`k`) stehen
 // nur drin, wenn sie sich seit dem letzten Snapshot geändert haben (Treffer, Zerstörung).
 type PlayerWire = { i: 1 | 2; x: number; y: number; a: number; l: number; c: number; u: number };
-type EnemyWire = { i: number; x: number; y: number; a: number; c: number; t: number; s: number };
+type EnemyWire = {
+  i: number;
+  x: number;
+  y: number;
+  a: number;
+  c: number;
+  t: number;
+  s: number;
+  m: number;
+};
 type ObstacleWire = {
   i: number;
   x: number;
@@ -915,6 +1257,7 @@ export function toSnapshot(
       c: r2(e.cooldown),
       t: r2(e.aiTimer),
       s: e.strafe,
+      m: e.plan,
     })),
     b: s.bullets.map((b) => ({
       i: b.id,
@@ -971,6 +1314,7 @@ export function applySnapshot(prev: State, snap: Snapshot): State {
       cooldown: e.c,
       aiTimer: e.t,
       strafe: e.s,
+      plan: e.m,
     })),
     obstacles: snap.k
       ? snap.k[0].map((o) => ({

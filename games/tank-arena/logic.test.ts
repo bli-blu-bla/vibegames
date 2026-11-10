@@ -56,13 +56,81 @@ describe('Tank Arena Logik', () => {
       ...createState(rng),
       obstacles: [],
       barrels: [],
-      enemies: [{ id: 99, x: 400, y: 180, angle: Math.PI, cooldown: 5, aiTimer: 2, strafe: 1 }],
+      enemies: [
+        { id: 99, x: 400, y: 180, angle: Math.PI, cooldown: 5, aiTimer: 2, strafe: 1, plan: 0 },
+      ],
     };
 
     const next = update(s, { moveX: 1, moveY: 0, fire: true }, 0.1, rng);
     expect(next.players[0]?.x).toBeGreaterThan(s.players[0]?.x ?? 0);
     expect(next.bullets.length).toBe(1);
     expect(next.bullets[0]?.fromPlayer).toBe(true);
+  });
+
+  it('Gegner finden den Weg um eine lange Wand herum', () => {
+    const rng = createRng('path');
+    const wall = {
+      id: 60,
+      x: 230,
+      y: 40,
+      w: 20,
+      h: 220,
+      destructible: false,
+      hp: 1,
+      maxHp: 1,
+    };
+    let s: State = {
+      ...createState(rng),
+      obstacles: [wall],
+      barrels: [],
+      enemies: [
+        { id: 99, x: 400, y: 180, angle: Math.PI, cooldown: 5, aiTimer: 99, strafe: 1, plan: 0 },
+      ],
+    };
+    s = { ...s, players: s.players.map((p) => ({ ...p, x: 60, y: 180, invuln: 99 })) };
+    let minDist = Infinity;
+    for (let i = 0; i < 1500; i++) {
+      s = update(s, { moveX: 0, moveY: 0, fire: false }, 1 / 60, rng);
+      const e = s.enemies[0];
+      if (e) minDist = Math.min(minDist, Math.hypot(e.x - 60, e.y - 180));
+    }
+    expect(minDist).toBeLessThan(200);
+  });
+
+  it('Gegner (Mittel) schießen eine Mauer frei, die den Weg versperrt', () => {
+    const rng = createRng('breach-1');
+    const wall = { id: 61, x: 230, y: 20, w: 20, h: 320, destructible: true, hp: 2, maxHp: 2 };
+    let s: State = {
+      ...createState(rng, LEVELS[1] as Level),
+      obstacles: [wall],
+      barrels: [],
+      enemies: [
+        { id: 99, x: 300, y: 180, angle: Math.PI, cooldown: 0, aiTimer: 99, strafe: 1, plan: 0 },
+      ],
+    };
+    s = { ...s, players: s.players.map((p) => ({ ...p, x: 60, y: 180, invuln: 99 })) };
+    for (let i = 0; i < 600 && s.obstacles.length > 0; i++) {
+      s = update(s, { moveX: 0, moveY: 0, fire: false }, 1 / 60, rng);
+    }
+    expect(s.obstacles.length).toBe(0);
+  });
+
+  it('Gegner (Leicht) schießen keine Mauern frei', () => {
+    const rng = createRng('breach-0');
+    const wall = { id: 61, x: 230, y: 20, w: 20, h: 320, destructible: true, hp: 2, maxHp: 2 };
+    let s: State = {
+      ...createState(rng, LEVELS[0] as Level),
+      obstacles: [wall],
+      barrels: [],
+      enemies: [
+        { id: 99, x: 300, y: 180, angle: Math.PI, cooldown: 0, aiTimer: 99, strafe: 1, plan: 0 },
+      ],
+    };
+    s = { ...s, players: s.players.map((p) => ({ ...p, x: 60, y: 180, invuln: 99 })) };
+    for (let i = 0; i < 600; i++) {
+      s = update(s, { moveX: 0, moveY: 0, fire: false }, 1 / 60, rng);
+    }
+    expect(s.obstacles.length).toBe(1);
   });
 
   it('zerstört zerstörbare Wände nach ausreichend Treffern, unzerstörbare bleiben bestehen', () => {
@@ -93,7 +161,9 @@ describe('Tank Arena Logik', () => {
       ...base,
       obstacles: [brick, steel],
       barrels: [],
-      enemies: [{ id: 99, x: 420, y: 80, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }],
+      enemies: [
+        { id: 99, x: 420, y: 80, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 },
+      ],
       bullets: [
         { id: 1, x: 148, y: 175, vx: 200, vy: 0, ownerId: 1, fromPlayer: true },
         { id: 2, x: 148, y: 255, vx: 200, vy: 0, ownerId: 1, fromPlayer: true },
@@ -137,8 +207,8 @@ describe('Tank Arena Logik', () => {
         { id: 71, x: 225, y: 180, radius: BARREL_RADIUS }, // in Kettenreaktions-Reichweite von Fass 70
       ],
       enemies: [
-        { id: 80, x: 250, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }, // nahe Fass 71
-        { id: 81, x: 420, y: 60, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }, // weit weg
+        { id: 80, x: 250, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 }, // nahe Fass 71
+        { id: 81, x: 420, y: 60, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 }, // weit weg
       ],
       bullets: [{ id: 1, x: 168, y: 180, vx: 250, vy: 0, ownerId: 1, fromPlayer: true }],
     };
@@ -165,7 +235,9 @@ describe('Tank Arena Logik', () => {
       ...base,
       obstacles: [],
       barrels: [],
-      enemies: [{ id: 90, x: 400, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }],
+      enemies: [
+        { id: 90, x: 400, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 },
+      ],
       bullets: [{ id: 1, x: p1.x + 8, y: p1.y, vx: -200, vy: 0, ownerId: 90, fromPlayer: false }],
     };
     s = update(s, IDLE_INPUT, 0.05, rng);
@@ -184,6 +256,7 @@ describe('Tank Arena Logik', () => {
           cooldown: 10,
           aiTimer: 5,
           strafe: 1,
+          plan: 0,
         },
       ],
     };
@@ -195,7 +268,9 @@ describe('Tank Arena Logik', () => {
     s = {
       ...s,
       players: [{ ...(s.players[0] as (typeof s.players)[number]), invuln: 0 }],
-      enemies: [{ id: 90, x: 400, y: 80, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }],
+      enemies: [
+        { id: 90, x: 400, y: 80, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 },
+      ],
       barrels: [{ id: 75, x: p1.x + 30, y: p1.y, radius: BARREL_RADIUS }],
       bullets: [{ id: 2, x: p1.x + 25, y: p1.y, vx: 200, vy: 0, ownerId: 1, fromPlayer: true }],
     };
@@ -211,7 +286,9 @@ describe('Tank Arena Logik', () => {
       ...base,
       obstacles: [],
       barrels: [],
-      enemies: [{ id: 95, x: 180, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1 }],
+      enemies: [
+        { id: 95, x: 180, y: 180, angle: Math.PI, cooldown: 10, aiTimer: 5, strafe: 1, plan: 0 },
+      ],
       bullets: [{ id: 1, x: 170, y: 180, vx: 250, vy: 0, ownerId: 1, fromPlayer: true }],
     };
 
